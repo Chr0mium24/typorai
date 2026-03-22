@@ -66,6 +66,14 @@ export const RefreshIcon = (props: IconProps) => (
   </svg>
 );
 
+export const CodeIcon = (props: IconProps) => (
+  <svg aria-hidden="true" {...baseProps} {...props}>
+    <path d="m8 9-4 3 4 3" />
+    <path d="m16 9 4 3-4 3" />
+    <path d="m14 5-4 14" />
+  </svg>
+);
+
 export const TrashIcon = (props: IconProps) => (
   <svg aria-hidden="true" {...baseProps} {...props}>
     <path d="M3 6h18" />

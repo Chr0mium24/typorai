@@ -69,11 +69,11 @@ export const loadWorkspaceSnapshot = async (): Promise<WorkspaceSnapshot> => {
     folders,
     session:
       sessionSetting?.id === 'session'
-        ? sessionSetting.value
+        ? { ...defaultWorkspaceSession, ...sessionSetting.value }
         : defaultWorkspaceSession,
     githubSettings:
       githubSetting?.id === 'github'
-        ? githubSetting.value
+        ? { ...defaultGithubSettings, ...githubSetting.value }
         : defaultGithubSettings,
   };
 };

@@ -6,15 +6,22 @@ import { commonmark } from '@milkdown/preset-commonmark';
 import { gfm } from '@milkdown/preset-gfm';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import { nord } from '@milkdown/theme-nord';
-import type { DocumentRecord, FolderRecord } from '../types/workspace';
+import type {
+  DocumentRecord,
+  FolderRecord,
+  WorkspaceSession,
+} from '../types/workspace';
 import { getFolderPath } from '../lib/tree';
+import { CodeIcon } from './icons';
 
 type EditorPaneProps = {
   document: DocumentRecord | null;
   folders: FolderRecord[];
+  mode: WorkspaceSession['editorMode'];
   onChangeTitle: (title: string) => void;
   onChangeMarkdown: (markdown: string) => void;
   onCreateDocument: () => void;
+  onToggleMode: () => void;
 };
 
 type MilkdownSurfaceProps = {
@@ -49,9 +56,11 @@ const MilkdownSurface = ({ markdown, onChange }: MilkdownSurfaceProps) => {
 const EditorPane = ({
   document,
   folders,
+  mode,
   onChangeTitle,
   onChangeMarkdown,
   onCreateDocument,
+  onToggleMode,
 }: EditorPaneProps) => {
   const breadcrumb = useMemo(() => {
     if (!document) return [];
@@ -85,6 +94,16 @@ const EditorPane = ({
           />
         </div>
         <div className="editor-badges">
+          <button
+            className={`icon-button editor-mode-toggle ${
+              mode === 'source' ? 'is-active' : ''
+            }`}
+            onClick={onToggleMode}
+            title={mode === 'source' ? '切回可视编辑' : '切换到源码模式'}
+            type="button"
+          >
+            <CodeIcon width={16} height={16} />
+          </button>
           <span className={`badge ${document.remoteDirty ? 'is-warning' : 'is-clean'}`}>
             {document.remoteDirty ? '待同步' : '已同步'}
           </span>
@@ -92,12 +111,22 @@ const EditorPane = ({
       </div>
 
       <div className="editor-card">
-        <MilkdownProvider key={document.id}>
-          <MilkdownSurface
-            markdown={document.markdown}
-            onChange={onChangeMarkdown}
+        {mode === 'source' ? (
+          <textarea
+            className="source-editor"
+            onChange={(event) => onChangeMarkdown(event.target.value)}
+            placeholder="Markdown source"
+            spellCheck={false}
+            value={document.markdown}
           />
-        </MilkdownProvider>
+        ) : (
+          <MilkdownProvider key={document.id}>
+            <MilkdownSurface
+              markdown={document.markdown}
+              onChange={onChangeMarkdown}
+            />
+          </MilkdownProvider>
+        )}
       </div>
     </section>
   );

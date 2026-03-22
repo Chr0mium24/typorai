@@ -4,7 +4,11 @@ import { TabBar } from './components/TabBar';
 import { StatusBar } from './components/StatusBar';
 import { SettingsPanel } from './components/SettingsPanel';
 import { useWorkspaceStore } from './store/workspace-store';
-import { MenuIcon, RefreshIcon, SettingsIcon } from './components/icons';
+import {
+  MenuIcon,
+  RefreshIcon,
+  SettingsIcon,
+} from './components/icons';
 
 const EditorPane = lazy(() => import('./components/EditorPane'));
 
@@ -34,6 +38,7 @@ function App() {
     openDocument,
     closeDocument,
     setActiveDocument,
+    setEditorMode,
     setSelectedFolder,
     updateDocumentTitle,
     updateDocumentMarkdown,
@@ -176,6 +181,7 @@ function App() {
           <EditorPane
             document={activeDocument}
             folders={folders}
+            mode={session.editorMode}
             onChangeMarkdown={(markdown) => {
               if (!activeDocument) return;
               updateDocumentMarkdown(activeDocument.id, markdown);
@@ -185,6 +191,11 @@ function App() {
               updateDocumentTitle(activeDocument.id, title);
             }}
             onCreateDocument={() => createDocument('Untitled note')}
+            onToggleMode={() =>
+              setEditorMode(
+                session.editorMode === 'source' ? 'wysiwyg' : 'source',
+              )
+            }
           />
         </Suspense>
 

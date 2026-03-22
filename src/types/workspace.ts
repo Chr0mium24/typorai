@@ -28,6 +28,7 @@ export type WorkspaceSession = {
   activeDocumentId: string | null;
   selectedFolderId: string | null;
   sidebarCollapsed: boolean;
+  editorMode: 'wysiwyg' | 'source';
 };
 
 export type GithubSettings = {
@@ -71,5 +72,5 @@ export const defaultWorkspaceSession: WorkspaceSession = {
   activeDocumentId: null,
   selectedFolderId: null,
   sidebarCollapsed: false,
+  editorMode: 'wysiwyg',
 };
-

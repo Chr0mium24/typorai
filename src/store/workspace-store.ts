@@ -248,6 +248,7 @@ export type WorkspaceStore = {
   closeDocument: (documentId: string) => void;
   setActiveDocument: (documentId: string) => void;
   setSelectedFolder: (folderId: string | null) => void;
+  setEditorMode: (mode: WorkspaceSession['editorMode']) => void;
   updateDocumentTitle: (documentId: string, title: string) => void;
   updateDocumentMarkdown: (documentId: string, markdown: string) => void;
   toggleFolderExpanded: (folderId: string) => void;
@@ -488,6 +489,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       session: {
         ...current.session,
         selectedFolderId: folderId,
+      },
+    }));
+
+    saveSessionSoon(get, set);
+  },
+
+  setEditorMode: (mode) => {
+    set((current) => ({
+      session: {
+        ...current.session,
+        editorMode: mode,
       },
     }));
 

@@ -46,11 +46,7 @@ type PythonOverlayItem = {
   id: string;
   code: string;
   buttonHost: HTMLElement | null;
-  top: number;
-  left: number;
-  right: number;
-  outputTop: number;
-  width: number;
+  outputHost: HTMLElement | null;
 };
 
 const emptyPythonResult: PythonResult = {
@@ -319,8 +315,7 @@ const PythonDecorations = ({
 
     const blocks = extractPythonBlocks(markdown);
     const root = rootRef.current?.querySelector('.ProseMirror');
-    const card = rootRef.current?.closest('.editor-card');
-    if (!(root instanceof HTMLElement) || !(card instanceof HTMLElement)) return;
+    if (!(root instanceof HTMLElement)) return;
     let disposed = false;
 
     const measure = () => {
@@ -330,7 +325,6 @@ const PythonDecorations = ({
         root.querySelectorAll<HTMLElement>('pre > code, .cm-content'),
       );
       const used = new Set<number>();
-      const cardRect = card.getBoundingClientRect();
       const nextItems: PythonOverlayItem[] = [];
 
       blocks.forEach((block) => {
@@ -353,23 +347,12 @@ const PythonDecorations = ({
         const codeBlock = blockRoot.closest<HTMLElement>('.milkdown-code-block');
         const buttonHost =
           codeBlock?.querySelector<HTMLElement>('.tools .tools-button-group') ?? null;
-        const top = blockRoot.offsetTop;
-        const left = blockRoot.offsetLeft;
-        const right = Math.max(cardRect.right - blockRect.right, 0) + 8;
-        const width = Math.min(
-          blockRoot.clientWidth,
-          Math.max(card.clientWidth - 32, 240),
-        );
 
         nextItems.push({
           id: block.id,
           code: block.code,
           buttonHost,
-          top,
-          left,
-          right,
-          outputTop: top + blockRoot.offsetHeight + 8,
-          width,
+          outputHost: codeBlock,
         });
       });
 
@@ -389,7 +372,7 @@ const PythonDecorations = ({
       window.requestAnimationFrame(measure);
     });
 
-    resizeObserver.observe(card);
+    resizeObserver.observe(root);
     window.requestAnimationFrame(measure);
 
     return () => {
@@ -403,7 +386,7 @@ const PythonDecorations = ({
   if (mode !== 'wysiwyg' || items.length === 0) return null;
 
   return (
-    <div className="python-overlay-layer">
+    <>
       {items.map((item) => {
         const state = results[item.id] ?? emptyPythonResult;
 
@@ -444,30 +427,26 @@ const PythonDecorations = ({
                 )
               : null}
 
-            {state.status !== 'idle' ? (
-              <div
-                className={`python-inline-output ${state.error ? 'has-error' : ''}`}
-                style={{
-                  top: `${item.outputTop}px`,
-                  left: `${item.left}px`,
-                  width: `${item.width}px`,
-                }}
-              >
-                {state.output ? (
-                  <pre dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.output) }} />
-                ) : null}
-                {state.error ? (
-                  <pre
-                    className="python-inline-error"
-                    dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.error) }}
-                  />
-                ) : null}
-              </div>
-            ) : null}
+            {state.status !== 'idle' && item.outputHost
+              ? createPortal(
+                  <div className={`python-inline-output ${state.error ? 'has-error' : ''}`}>
+                    {state.output ? (
+                      <pre dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.output) }} />
+                    ) : null}
+                    {state.error ? (
+                      <pre
+                        className="python-inline-error"
+                        dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.error) }}
+                      />
+                    ) : null}
+                  </div>,
+                  item.outputHost,
+                )
+              : null}
           </Fragment>
         );
       })}
-    </div>
+    </>
   );
 };
 

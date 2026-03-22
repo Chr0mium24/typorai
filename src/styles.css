@@ -502,7 +502,7 @@ body {
   border-radius: 12px;
   border: 1px solid rgba(54, 39, 24, 0.08);
   overflow: auto;
-  padding: 0.65rem 0.9rem;
+  padding: 0.45rem 0.55rem;
 }
 
 .editor-stack {
@@ -531,8 +531,8 @@ body {
 .editor-surface {
   min-height: 100%;
   width: 100%;
-  max-width: 1040px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
 }
 
 .editor-card .milkdown,
@@ -568,7 +568,7 @@ body {
 
 .editor-card .milkdown .ProseMirror.editor,
 .editor-card .milkdown-theme-nord .ProseMirror.editor {
-  padding: 24px 32px !important;
+  padding: 14px 18px !important;
 }
 
 .python-overlay-layer {
@@ -799,7 +799,7 @@ body {
   }
 
   .editor-card {
-    padding: 0.62rem 0.68rem;
+    padding: 0.34rem 0.4rem;
     border-radius: 10px;
   }
 

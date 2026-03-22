@@ -13,6 +13,7 @@ import type {
 } from '../types/workspace';
 import { getFolderPath } from '../lib/tree';
 import { CodeIcon, RefreshIcon, SettingsIcon } from './icons';
+import { PythonRunner } from './PythonRunner';
 
 type EditorPaneProps = {
   document: DocumentRecord | null;
@@ -200,6 +201,8 @@ const EditorPane = ({
           </div>
         </div>
       </div>
+
+      <PythonRunner markdown={document.markdown} />
     </section>
   );
 };

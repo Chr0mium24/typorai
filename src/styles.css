@@ -515,6 +515,86 @@ input {
   tab-size: 2;
 }
 
+.python-runner {
+  margin-top: 0.75rem;
+  border-top: 1px solid rgba(63, 45, 29, 0.09);
+  padding-top: 0.7rem;
+}
+
+.python-runner-header,
+.python-runner-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.python-runner-header h3 {
+  margin: 0.12rem 0 0;
+  font-size: 0.96rem;
+}
+
+.runner-meta,
+.runner-location {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.runner-location {
+  display: block;
+  margin-top: 0.18rem;
+}
+
+.python-runner-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.6rem;
+}
+
+.python-runner-card {
+  border: 1px solid rgba(63, 45, 29, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.46);
+  padding: 0.65rem;
+}
+
+.python-code-preview,
+.python-output,
+.python-error {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 0.84rem/1.58 'SFMono-Regular', 'Menlo', 'Consolas', monospace;
+}
+
+.python-code-preview {
+  margin-top: 0.55rem;
+  color: var(--ink);
+}
+
+.python-output-panel {
+  margin-top: 0.55rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.python-output,
+.python-error {
+  padding: 0.6rem;
+  border-radius: 8px;
+  overflow: auto;
+  max-height: 180px;
+}
+
+.python-output {
+  background: rgba(38, 72, 63, 0.08);
+}
+
+.python-error {
+  background: rgba(181, 79, 44, 0.10);
+  color: var(--accent-strong);
+}
+
 .status-bar {
   padding: 0.55rem 0.85rem 0.7rem;
   border-top: 1px solid var(--line);

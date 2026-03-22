@@ -574,9 +574,6 @@ const EditorPane = ({
           >
             <CodeIcon width={16} height={16} />
           </button>
-          <span className={`badge ${document.remoteDirty ? 'is-warning' : 'is-clean'}`}>
-            {document.remoteDirty ? '待同步' : '已同步'}
-          </span>
         </div>
       </div>
 

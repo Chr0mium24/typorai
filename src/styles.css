@@ -268,10 +268,12 @@ body {
   width: 100%;
   min-width: 0;
   padding: 0.44rem 0.42rem;
+  border: 0;
   background: transparent;
   color: var(--ink);
   text-align: left;
   font-size: 0.9rem;
+  appearance: none;
 }
 
 .tree-entry.is-active,
@@ -332,8 +334,10 @@ body {
   flex: none;
   color: var(--muted);
   background: transparent;
+  border: 0;
   border-radius: 10px;
   opacity: 0;
+  appearance: none;
 }
 
 .tree-entry:hover .tree-action,

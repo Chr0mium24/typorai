@@ -198,6 +198,7 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
   const rootRef = useRef<HTMLDivElement | null>(null);
   const crepeRef = useRef<Crepe | null>(null);
   const onChangeRef = useRef(onChange);
+  const editorMarkdownRef = useRef(markdown);
 
   onChangeRef.current = onChange;
 
@@ -225,11 +226,13 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
 
     crepe.on((api) => {
       api.markdownUpdated((_, nextMarkdown) => {
+        editorMarkdownRef.current = nextMarkdown;
         onChangeRef.current(nextMarkdown);
       });
     });
 
     await crepe.create();
+    editorMarkdownRef.current = defaultValue;
     pruneLanguageLists(root);
 
     const languageListObserver = new MutationObserver(() => {
@@ -272,7 +275,12 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
     if (!active) return;
 
     const current = crepeRef.current;
-    if (!current || current.getMarkdown() === markdown) return;
+    if (!current) return;
+    if (markdown === editorMarkdownRef.current) return;
+    if (current.getMarkdown() === markdown) {
+      editorMarkdownRef.current = markdown;
+      return;
+    }
 
     let cancelled = false;
 

@@ -11,6 +11,9 @@ importers:
       '@milkdown/core':
         specifier: ^7.11.0
         version: 7.19.1
+      '@milkdown/crepe':
+        specifier: ^7.19.1
+        version: 7.19.1(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.7)(typescript@5.9.3)
       '@milkdown/plugin-history':
         specifier: ^7.11.0
         version: 7.19.1

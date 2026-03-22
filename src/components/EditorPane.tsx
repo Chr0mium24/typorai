@@ -1,11 +1,5 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import { Editor, defaultValueCtx, rootCtx } from '@milkdown/core';
-import { history } from '@milkdown/plugin-history';
-import { listener, listenerCtx } from '@milkdown/plugin-listener';
-import { commonmark } from '@milkdown/preset-commonmark';
-import { gfm } from '@milkdown/preset-gfm';
-import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
-import { nord } from '@milkdown/theme-nord';
+import { Crepe } from '@milkdown/crepe';
 import type {
   DocumentRecord,
   FolderRecord,
@@ -30,6 +24,7 @@ type EditorPaneProps = {
 
 type MilkdownSurfaceProps = {
   markdown: string;
+  active: boolean;
   onChange: (markdown: string) => void;
 };
 
@@ -166,28 +161,83 @@ const restoreVisualSelection = (container: HTMLDivElement, ratio: number) => {
 const getEscapedHtml = (value: string) =>
   value.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char] ?? char));
 
-const MilkdownSurface = ({ markdown, onChange }: MilkdownSurfaceProps) => {
-  useEditor((root) =>
-    Editor.make()
-      .config((ctx) => {
-        ctx.set(rootCtx, root);
-        ctx.set(defaultValueCtx, markdown);
-        ctx.get(listenerCtx).markdownUpdated((_, nextMarkdown) => {
-          onChange(nextMarkdown);
-        });
-      })
-      .config(nord)
-      .use(commonmark)
-      .use(gfm)
-      .use(history)
-      .use(listener),
-  );
+const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) => {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const crepeRef = useRef<Crepe | null>(null);
+  const onChangeRef = useRef(onChange);
 
-  return (
-    <div className="editor-surface">
-      <Milkdown />
-    </div>
-  );
+  onChangeRef.current = onChange;
+
+  const createCrepe = async (defaultValue: string) => {
+    const root = rootRef.current;
+    if (!root) return null;
+
+    root.innerHTML = '';
+
+    const crepe = new Crepe({
+      root,
+      defaultValue,
+      features: {
+        [Crepe.Feature.Toolbar]: false,
+        [Crepe.Feature.BlockEdit]: false,
+        [Crepe.Feature.ImageBlock]: false,
+      },
+    });
+
+    crepe.on((api) => {
+      api.markdownUpdated((_, nextMarkdown) => {
+        onChangeRef.current(nextMarkdown);
+      });
+    });
+
+    await crepe.create();
+    crepeRef.current = crepe;
+    return crepe;
+  };
+
+  useEffect(() => {
+    let disposed = false;
+
+    void createCrepe(markdown).then(async (crepe) => {
+      if (!disposed || !crepe) return;
+      await crepe.destroy();
+    });
+
+    return () => {
+      disposed = true;
+      const crepe = crepeRef.current;
+      crepeRef.current = null;
+      if (crepe) {
+        void crepe.destroy();
+      }
+      if (rootRef.current) {
+        rootRef.current.innerHTML = '';
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+
+    const current = crepeRef.current;
+    if (!current || current.getMarkdown() === markdown) return;
+
+    let cancelled = false;
+
+    void current.destroy().then(async () => {
+      if (cancelled || !rootRef.current) return;
+      const next = await createCrepe(markdown);
+      if (cancelled && next) {
+        await next.destroy();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, markdown]);
+
+  return <div className="editor-surface" ref={rootRef} />;
 };
 
 type PythonDecorationsProps = {
@@ -216,7 +266,9 @@ const PythonDecorations = ({
     const measure = () => {
       if (disposed) return;
 
-      const codeNodes = Array.from(root.querySelectorAll('pre > code'));
+      const codeNodes = Array.from(
+        root.querySelectorAll<HTMLElement>('pre > code, .cm-content'),
+      );
       const used = new Set<number>();
       const cardRect = card.getBoundingClientRect();
       const nextItems: PythonOverlayItem[] = [];
@@ -232,14 +284,19 @@ const PythonDecorations = ({
         used.add(matchIndex);
 
         const codeNode = codeNodes[matchIndex];
-        const pre = codeNode.parentElement;
-        if (!(pre instanceof HTMLElement)) return;
+        const blockRoot =
+          codeNode.closest<HTMLElement>('.cm-editor') ??
+          codeNode.closest<HTMLElement>('pre');
+        if (!(blockRoot instanceof HTMLElement)) return;
 
-        const preRect = pre.getBoundingClientRect();
-        const top = pre.offsetTop;
-        const left = pre.offsetLeft;
-        const right = Math.max(cardRect.right - preRect.right, 0) + 8;
-        const width = Math.min(pre.clientWidth, Math.max(card.clientWidth - 32, 240));
+        const blockRect = blockRoot.getBoundingClientRect();
+        const top = blockRoot.offsetTop;
+        const left = blockRoot.offsetLeft;
+        const right = Math.max(cardRect.right - blockRect.right, 0) + 8;
+        const width = Math.min(
+          blockRoot.clientWidth,
+          Math.max(card.clientWidth - 32, 240),
+        );
 
         nextItems.push({
           id: block.id,
@@ -247,7 +304,7 @@ const PythonDecorations = ({
           top,
           left,
           right,
-          outputTop: top + pre.offsetHeight + 8,
+          outputTop: top + blockRoot.offsetHeight + 8,
           width,
         });
       });
@@ -493,12 +550,12 @@ const EditorPane = ({
             }`}
             ref={visualEditorRef}
           >
-            <MilkdownProvider key={document.id}>
-              <MilkdownSurface
-                markdown={document.markdown}
-                onChange={onChangeMarkdown}
-              />
-            </MilkdownProvider>
+            <MilkdownSurface
+              active={mode === 'wysiwyg'}
+              key={document.id}
+              markdown={document.markdown}
+              onChange={onChangeMarkdown}
+            />
             <PythonDecorations
               markdown={document.markdown}
               mode={mode}

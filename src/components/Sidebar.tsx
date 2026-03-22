@@ -1,11 +1,6 @@
 import { FileTree } from './FileTree';
 import type { DocumentRecord, FolderRecord } from '../types/workspace';
-import {
-  FilePlusIcon,
-  FolderPlusIcon,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
-} from './icons';
+import { FolderPlusIcon } from './icons';
 
 type SidebarProps = {
   collapsed: boolean;
@@ -14,8 +9,6 @@ type SidebarProps = {
   documents: DocumentRecord[];
   activeDocumentId: string | null;
   selectedFolderId: string | null;
-  onToggleSidebar: () => void;
-  onCreateDocument: () => void;
   onCreateFolder: () => void;
   onOpenDocument: (documentId: string) => void;
   onToggleFolder: (folderId: string) => void;
@@ -32,8 +25,6 @@ export const Sidebar = ({
   documents,
   activeDocumentId,
   selectedFolderId,
-  onToggleSidebar,
-  onCreateDocument,
   onCreateFolder,
   onOpenDocument,
   onToggleFolder,
@@ -43,36 +34,7 @@ export const Sidebar = ({
   onCloseMobile,
 }: SidebarProps) => {
   if (collapsed && !mobileOpen) {
-    return (
-      <aside className="sidebar is-collapsed">
-        <div className="sidebar-rail">
-          <button
-            className="icon-button"
-            onClick={onToggleSidebar}
-            title="展开侧边栏"
-            type="button"
-          >
-            <PanelLeftOpenIcon width={16} height={16} />
-          </button>
-          <button
-            className="icon-button"
-            onClick={onCreateDocument}
-            title="新建文档"
-            type="button"
-          >
-            <FilePlusIcon width={16} height={16} />
-          </button>
-          <button
-            className="icon-button"
-            onClick={onCreateFolder}
-            title="新建文件夹"
-            type="button"
-          >
-            <FolderPlusIcon width={16} height={16} />
-          </button>
-        </div>
-      </aside>
-    );
+    return null;
   }
 
   return (
@@ -85,25 +47,6 @@ export const Sidebar = ({
             <p className="eyebrow">Workspace</p>
             <h1>TyporAI</h1>
           </div>
-          <button
-            className="icon-button"
-            onClick={onToggleSidebar}
-            title="收起侧边栏"
-            type="button"
-          >
-            <PanelLeftCloseIcon width={16} height={16} />
-          </button>
-        </div>
-
-        <div className="sidebar-actions">
-          <button
-            className="icon-button"
-            onClick={onCreateDocument}
-            title="新建文档"
-            type="button"
-          >
-            <FilePlusIcon width={16} height={16} />
-          </button>
           <button
             className="icon-button"
             onClick={onCreateFolder}

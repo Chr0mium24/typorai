@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Editor, defaultValueCtx, rootCtx } from '@milkdown/core';
 import { history } from '@milkdown/plugin-history';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
@@ -12,7 +12,7 @@ import type {
   WorkspaceSession,
 } from '../types/workspace';
 import { getFolderPath } from '../lib/tree';
-import { CodeIcon } from './icons';
+import { CodeIcon, RefreshIcon, SettingsIcon } from './icons';
 
 type EditorPaneProps = {
   document: DocumentRecord | null;
@@ -21,6 +21,8 @@ type EditorPaneProps = {
   onChangeTitle: (title: string) => void;
   onChangeMarkdown: (markdown: string) => void;
   onCreateDocument: () => void;
+  onOpenSettings: () => void;
+  onSyncNow: () => void;
   onToggleMode: () => void;
 };
 
@@ -60,12 +62,47 @@ const EditorPane = ({
   onChangeTitle,
   onChangeMarkdown,
   onCreateDocument,
+  onOpenSettings,
+  onSyncNow,
   onToggleMode,
 }: EditorPaneProps) => {
+  const sourceEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const visualEditorRef = useRef<HTMLDivElement | null>(null);
+  const sourceSelectionRef = useRef({ start: 0, end: 0 });
+
   const breadcrumb = useMemo(() => {
     if (!document) return [];
     return getFolderPath(document.parentFolderId, folders);
   }, [document, folders]);
+
+  useEffect(() => {
+    sourceSelectionRef.current = { start: 0, end: 0 };
+  }, [document?.id]);
+
+  useEffect(() => {
+    if (!document) return;
+
+    if (mode === 'source') {
+      const textarea = sourceEditorRef.current;
+      if (!textarea) return;
+      const nextStart = Math.min(
+        sourceSelectionRef.current.start,
+        textarea.value.length,
+      );
+      const nextEnd = Math.min(sourceSelectionRef.current.end, textarea.value.length);
+      window.requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(nextStart, nextEnd);
+      });
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      visualEditorRef.current
+        ?.querySelector<HTMLElement>('.ProseMirror')
+        ?.focus();
+    });
+  }, [document, mode]);
 
   if (!document) {
     return (
@@ -95,6 +132,22 @@ const EditorPane = ({
         </div>
         <div className="editor-badges">
           <button
+            className="icon-button"
+            onClick={onOpenSettings}
+            title="GitHub 设置"
+            type="button"
+          >
+            <SettingsIcon width={16} height={16} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={onSyncNow}
+            title="立即同步"
+            type="button"
+          >
+            <RefreshIcon width={16} height={16} />
+          </button>
+          <button
             className={`icon-button editor-mode-toggle ${
               mode === 'source' ? 'is-active' : ''
             }`}
@@ -111,22 +164,41 @@ const EditorPane = ({
       </div>
 
       <div className="editor-card">
-        {mode === 'source' ? (
-          <textarea
-            className="source-editor"
-            onChange={(event) => onChangeMarkdown(event.target.value)}
-            placeholder="Markdown source"
-            spellCheck={false}
-            value={document.markdown}
-          />
-        ) : (
-          <MilkdownProvider key={document.id}>
-            <MilkdownSurface
-              markdown={document.markdown}
-              onChange={onChangeMarkdown}
+        <div className={`editor-stack ${mode === 'source' ? 'is-source' : 'is-wysiwyg'}`}>
+          <div
+            className={`editor-mode-pane visual-pane ${
+              mode === 'wysiwyg' ? 'is-visible' : 'is-hidden'
+            }`}
+            ref={visualEditorRef}
+          >
+            <MilkdownProvider key={document.id}>
+              <MilkdownSurface
+                markdown={document.markdown}
+                onChange={onChangeMarkdown}
+              />
+            </MilkdownProvider>
+          </div>
+          <div
+            className={`editor-mode-pane source-pane ${
+              mode === 'source' ? 'is-visible' : 'is-hidden'
+            }`}
+          >
+            <textarea
+              className="source-editor"
+              onChange={(event) => onChangeMarkdown(event.target.value)}
+              onSelect={(event) => {
+                sourceSelectionRef.current = {
+                  start: event.currentTarget.selectionStart,
+                  end: event.currentTarget.selectionEnd,
+                };
+              }}
+              placeholder="Markdown source"
+              ref={sourceEditorRef}
+              spellCheck={false}
+              value={document.markdown}
             />
-          </MilkdownProvider>
-        )}
+          </div>
+        </div>
       </div>
     </section>
   );

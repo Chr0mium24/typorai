@@ -4,11 +4,6 @@ import { TabBar } from './components/TabBar';
 import { StatusBar } from './components/StatusBar';
 import { SettingsPanel } from './components/SettingsPanel';
 import { useWorkspaceStore } from './store/workspace-store';
-import {
-  MenuIcon,
-  RefreshIcon,
-  SettingsIcon,
-} from './components/icons';
 
 const EditorPane = lazy(() => import('./components/EditorPane'));
 
@@ -98,10 +93,6 @@ function App() {
         mobileOpen={mobileSidebarOpen}
         selectedFolderId={session.selectedFolderId}
         onCloseMobile={() => setMobileSidebarOpen(false)}
-        onCreateDocument={() => {
-          const name = promptForName('新文档标题', 'Untitled note');
-          createDocument(name || 'Untitled note');
-        }}
         onCreateFolder={() => {
           const name = promptForName('新文件夹名称', 'New folder');
           if (name) createFolder(name);
@@ -121,53 +112,26 @@ function App() {
         onOpenDocument={openDocument}
         onSelectFolder={setSelectedFolder}
         onToggleFolder={toggleFolderExpanded}
-        onToggleSidebar={toggleSidebar}
       />
 
       <main className="workspace-main">
-        <header className="workspace-toolbar">
-          <div className="toolbar-left">
-            <button
-              className="icon-button mobile-only"
-              onClick={() => setMobileSidebarOpen(true)}
-              title="打开文件树"
-              type="button"
-            >
-              <MenuIcon width={16} height={16} />
-            </button>
-            <div className="toolbar-brand">
-              <p className="eyebrow">TyporAI</p>
-              <span className="toolbar-summary">
-                {openDocuments.length} tabs · {documents.length} docs
-              </span>
-            </div>
-          </div>
-
-          <div className="toolbar-actions">
-            <button
-              className="icon-button"
-              onClick={() => setSettingsOpen(true)}
-              title="GitHub 设置"
-              type="button"
-            >
-              <SettingsIcon width={16} height={16} />
-            </button>
-            <button
-              className="icon-button"
-              onClick={() => void syncNow()}
-              title="立即同步"
-              type="button"
-            >
-              <RefreshIcon width={16} height={16} />
-            </button>
-          </div>
-        </header>
-
         <TabBar
           activeDocumentId={session.activeDocumentId}
           openDocuments={openDocuments}
+          onCreateDocument={() => {
+            const name = promptForName('新文档标题', 'Untitled note');
+            createDocument(name || 'Untitled note');
+          }}
           onActivate={setActiveDocument}
           onClose={closeDocument}
+          onToggleSidebar={() => {
+            if (window.innerWidth <= 1100) {
+              setMobileSidebarOpen(true);
+              return;
+            }
+            toggleSidebar();
+          }}
+          sidebarCollapsed={session.sidebarCollapsed}
         />
 
         <Suspense
@@ -191,6 +155,8 @@ function App() {
               updateDocumentTitle(activeDocument.id, title);
             }}
             onCreateDocument={() => createDocument('Untitled note')}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onSyncNow={() => void syncNow()}
             onToggleMode={() =>
               setEditorMode(
                 session.editorMode === 'source' ? 'wysiwyg' : 'source',

@@ -70,14 +70,14 @@ input {
 }
 
 .app-shell.is-sidebar-collapsed {
-  grid-template-columns: 88px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sidebar,
 .workspace-main,
 .settings-panel {
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 16px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
 }
@@ -91,21 +91,7 @@ input {
   position: relative;
   z-index: 20;
 }
-
-.sidebar.is-collapsed {
-  width: 88px;
-  padding: 0.65rem;
-}
-
-.sidebar-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  align-items: center;
-}
-
 .sidebar-header,
-.workspace-toolbar,
 .status-bar,
 .settings-header {
   display: flex;
@@ -129,16 +115,10 @@ input {
   font-size: 0.68rem;
 }
 
-.sidebar-actions,
-.toolbar-actions,
 .settings-actions {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-}
-
-.sidebar-actions {
-  padding-bottom: 0.15rem;
 }
 
 .primary-button,
@@ -162,8 +142,8 @@ input {
 }
 
 .icon-button {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -307,43 +287,39 @@ input {
 
 .workspace-main {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   background: rgba(255, 251, 246, 0.64);
   overflow: hidden;
 }
 
-.workspace-toolbar {
-  padding: 0.75rem 1rem 0.7rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-}
-
-.toolbar-brand {
-  display: grid;
-  gap: 0.15rem;
-}
-
-.toolbar-summary {
-  font-size: 0.84rem;
-  color: var(--muted);
-}
-
 .tab-bar {
-  display: flex;
-  gap: 0.5rem;
-  overflow: auto;
-  padding: 0.6rem 1rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 0.55rem;
+  padding: 0.55rem 0.8rem 0;
   border-bottom: 1px solid var(--line);
+  background: rgba(247, 240, 232, 0.72);
+}
+
+.tab-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding-bottom: 0.45rem;
+}
+
+.tab-strip {
+  display: flex;
+  align-items: end;
+  gap: 0.32rem;
+  overflow-x: auto;
+  padding-bottom: 0;
 }
 
 .tab-empty {
-  padding: 0.65rem 0.2rem;
+  padding: 0 0 0.5rem;
   color: var(--muted);
 }
 
@@ -351,15 +327,20 @@ input {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  padding: 0.52rem 0.72rem;
-  background: rgba(255, 255, 255, 0.56);
-  border: 1px solid var(--line);
+  padding: 0.48rem 0.8rem 0.44rem;
+  background: rgba(255, 255, 255, 0.46);
+  border: 1px solid rgba(63, 45, 29, 0.08);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
   min-width: 0;
   font-size: 0.88rem;
+  margin-top: 0.35rem;
 }
 
 .tab-item.is-active {
   background: #fffaf5;
+  margin-top: 0;
+  padding-top: 0.6rem;
 }
 
 .tab-title {
@@ -379,7 +360,7 @@ input {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0.95rem 1rem;
+  padding: 0.8rem 0.9rem;
 }
 
 .editor-empty {
@@ -394,7 +375,7 @@ input {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.55rem;
 }
 
 .editor-meta {
@@ -414,7 +395,7 @@ input {
   border-radius: 0;
   padding: 0;
   background: transparent;
-  font-size: clamp(1.35rem, 2vw, 2rem);
+  font-size: clamp(1.25rem, 1.7vw, 1.8rem);
   font-family: 'IBM Plex Serif', serif;
   font-weight: 500;
   line-height: 1.1;
@@ -427,7 +408,7 @@ input {
 .editor-badges {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.4rem;
 }
 
 .editor-mode-toggle {
@@ -454,15 +435,38 @@ input {
   min-height: 0;
   flex: 1;
   background: var(--paper);
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid rgba(54, 39, 24, 0.08);
   overflow: auto;
-  padding: clamp(0.75rem, 1.4vw, 1.2rem);
+  padding: 0.68rem 0.82rem;
+}
+
+.editor-stack {
+  display: grid;
+  min-height: 72vh;
+}
+
+.editor-mode-pane {
+  grid-area: 1 / 1;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.editor-mode-pane.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+}
+
+.editor-mode-pane.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .editor-surface {
   min-height: 100%;
-  max-width: 900px;
+  max-width: 860px;
 }
 
 .editor-card .milkdown,
@@ -500,7 +504,7 @@ input {
 }
 
 .status-bar {
-  padding: 0.7rem 1rem 0.82rem;
+  padding: 0.55rem 0.85rem 0.7rem;
   border-top: 1px solid var(--line);
   gap: 0.75rem;
   justify-content: flex-start;
@@ -572,26 +576,22 @@ input {
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+    gap: 0;
   }
 
   .sidebar {
     position: fixed;
-    inset: 1rem auto 1rem 1rem;
-    width: min(86vw, 340px);
+    inset: 0 auto 0 0;
+    width: min(88vw, 320px);
+    height: 100vh;
+    border-radius: 0 16px 16px 0;
     transform: translateX(-120%);
     transition: transform 180ms ease;
   }
 
   .sidebar.is-mobile-open {
     transform: translateX(0);
-  }
-
-  .mobile-only {
-    display: inline-flex;
-  }
-
-  .desktop-only {
-    display: none;
   }
 
   .mobile-backdrop {
@@ -604,48 +604,63 @@ input {
 }
 
 @media (max-width: 780px) {
-  .app-shell {
-    padding: 0;
-    gap: 0;
-  }
-
   .workspace-main {
     border-radius: 0;
     min-height: 100vh;
   }
 
-  .workspace-toolbar,
   .tab-bar,
   .editor-pane,
   .editor-empty,
   .status-bar {
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
+    padding-left: 0.72rem;
+    padding-right: 0.72rem;
   }
 
-  .workspace-toolbar,
   .status-bar,
   .editor-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .toolbar-actions,
+  .tab-bar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 0.45rem;
+    padding-top: 0.45rem;
+  }
+
+  .tab-controls,
+  .tab-strip,
   .status-group {
     width: 100%;
   }
 
-  .toolbar-actions {
-    justify-content: flex-end;
+  .tab-controls {
+    padding-bottom: 0;
   }
 
   .tab-item {
-    min-width: 140px;
+    min-width: 120px;
   }
 
   .editor-card {
-    padding: 0.8rem 0.72rem;
-    border-radius: 16px;
+    padding: 0.62rem 0.68rem;
+    border-radius: 10px;
+  }
+
+  .editor-title {
+    font-size: 1.14rem;
+  }
+
+  .editor-path {
+    font-size: 0.76rem;
+  }
+
+  .source-editor,
+  .editor-card .ProseMirror {
+    min-height: 58vh;
+    font-size: 0.9rem;
   }
 
   .settings-overlay {

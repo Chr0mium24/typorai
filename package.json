@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.15.0",
   "type": "module",
   "scripts": {
+    "start": "bash scripts/start.sh",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"

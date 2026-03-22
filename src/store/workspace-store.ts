@@ -428,12 +428,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const exists = state.documents.some((document) => document.id === documentId);
     if (!exists) return;
 
-    const document = state.documents.find((item) => item.id === documentId);
     set((current) => ({
       session: {
         ...current.session,
         activeDocumentId: documentId,
-        selectedFolderId: document?.parentFolderId ?? null,
         openDocumentIds: Array.from(
           new Set([...current.session.openDocumentIds, documentId]),
         ),
@@ -453,16 +451,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         ? openDocumentIds[openDocumentIds.length - 1] ?? null
         : state.session.activeDocumentId;
 
-    const nextActiveDocument = state.documents.find(
-      (document) => document.id === nextActiveDocumentId,
-    );
-
     set((current) => ({
       session: {
         ...current.session,
         openDocumentIds,
         activeDocumentId: nextActiveDocumentId,
-        selectedFolderId: nextActiveDocument?.parentFolderId ?? null,
       },
     }));
 
@@ -470,14 +463,13 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   setActiveDocument: (documentId) => {
-    const document = get().documents.find((item) => item.id === documentId);
-    if (!document) return;
+    const documentExists = get().documents.some((item) => item.id === documentId);
+    if (!documentExists) return;
 
     set((current) => ({
       session: {
         ...current.session,
         activeDocumentId: documentId,
-        selectedFolderId: document.parentFolderId,
       },
     }));
 

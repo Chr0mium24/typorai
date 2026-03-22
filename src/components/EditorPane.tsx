@@ -261,9 +261,6 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
         (crepe as Crepe & { __languageListObserver?: MutationObserver }).__languageListObserver?.disconnect();
         void crepe.destroy();
       }
-      if (rootRef.current) {
-        rootRef.current.innerHTML = '';
-      }
     };
   }, []);
 
@@ -273,12 +270,10 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
     const current = crepeRef.current;
     if (!current) return;
     if (markdown === editorMarkdownRef.current) return;
-    if (current.getMarkdown() === markdown) {
-      editorMarkdownRef.current = markdown;
-      return;
-    }
 
     let cancelled = false;
+    crepeRef.current = null;
+    (current as Crepe & { __languageListObserver?: MutationObserver }).__languageListObserver?.disconnect();
 
     void current.destroy().then(async () => {
       if (cancelled || !rootRef.current) return;

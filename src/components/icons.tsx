@@ -74,6 +74,12 @@ export const CodeIcon = (props: IconProps) => (
   </svg>
 );
 
+export const PlayIcon = (props: IconProps) => (
+  <svg aria-hidden="true" {...baseProps} {...props}>
+    <path d="m8 6 10 6-10 6z" />
+  </svg>
+);
+
 export const TrashIcon = (props: IconProps) => (
   <svg aria-hidden="true" {...baseProps} {...props}>
     <path d="M3 6h18" />

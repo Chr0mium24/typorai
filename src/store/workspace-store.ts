@@ -10,6 +10,7 @@ import {
 } from '../lib/db';
 import {
   createDocumentRecord,
+  createDocumentRecordFromMarkdown,
   createFolderRecord,
 } from '../lib/default-workspace';
 import {
@@ -26,6 +27,7 @@ import type {
 import {
   defaultGithubSettings,
   defaultWorkspaceSession,
+  ROOT_FOLDER_ID,
 } from '../types/workspace';
 
 const LOCAL_SAVE_DELAY_MS = 500;
@@ -199,6 +201,7 @@ const resolveParentFolderId = (
   documents: DocumentRecord[],
 ) => {
   if (explicitFolderId !== undefined) return explicitFolderId;
+  if (session.selectedFolderId === ROOT_FOLDER_ID) return null;
   if (session.selectedFolderId) return session.selectedFolderId;
 
   const activeDocument = documents.find(
@@ -244,6 +247,10 @@ export type WorkspaceStore = {
   createFolder: (name: string, parentFolderId?: string | null) => void;
   deleteDocument: (documentId: string) => Promise<void>;
   deleteFolder: (folderId: string) => Promise<void>;
+  importMarkdownFiles: (
+    files: Array<{ name: string; markdown: string }>,
+    parentFolderId?: string | null,
+  ) => Promise<void>;
   openDocument: (documentId: string) => void;
   closeDocument: (documentId: string) => void;
   setActiveDocument: (documentId: string) => void;
@@ -274,12 +281,20 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (get().hydrated) return;
 
     const snapshot = await loadWorkspaceSnapshot();
+    const nextSession =
+      snapshot.session.activeDocumentId &&
+      snapshot.session.selectedFolderId !== ROOT_FOLDER_ID
+        ? {
+            ...snapshot.session,
+            selectedFolderId: null,
+          }
+        : snapshot.session;
 
     set({
       hydrated: true,
       documents: snapshot.documents,
       folders: snapshot.folders,
-      session: snapshot.session,
+      session: nextSession,
       githubSettings: snapshot.githubSettings,
       syncState: {
         status: isGithubConfigured(snapshot.githubSettings)
@@ -294,6 +309,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       },
       browserSaveState: 'saved',
     });
+
+    if (nextSession !== snapshot.session) {
+      void persistSession(nextSession);
+    }
 
     startSyncLoop(get, set);
     scheduleRemoteSync(get, set);
@@ -312,7 +331,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       documents: [...current.documents, document],
       session: {
         ...current.session,
-        selectedFolderId: resolvedParent,
+        selectedFolderId: null,
         activeDocumentId: document.id,
         openDocumentIds: Array.from(
           new Set([...current.session.openDocumentIds, document.id]),
@@ -423,6 +442,59 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     scheduleRemoteSync(get, set);
   },
 
+  importMarkdownFiles: async (files, parentFolderId) => {
+    const imports = files
+      .map(({ name, markdown }) => {
+        const trimmedName = name.trim();
+        return {
+          title: trimmedName.replace(/\.md$/i, '').trim() || 'Untitled note',
+          markdown,
+          sourceName: trimmedName,
+        };
+      })
+      .filter(({ sourceName }) => sourceName.toLowerCase().endsWith('.md'));
+
+    if (imports.length === 0) return;
+
+    const state = get();
+    const resolvedParent = resolveParentFolderId(
+      parentFolderId,
+      state.session,
+      state.documents,
+    );
+    const savedAt = nowIso();
+    const createdDocuments = imports.map(({ title, markdown }) => ({
+      ...createDocumentRecordFromMarkdown(title, markdown, resolvedParent),
+      lastLocalSaveAt: savedAt,
+    }));
+    const firstDocumentId = createdDocuments[0]?.id ?? null;
+
+    set((current) => ({
+      documents: [...current.documents, ...createdDocuments],
+      session: {
+        ...current.session,
+        selectedFolderId: null,
+        activeDocumentId: firstDocumentId,
+        openDocumentIds: Array.from(
+          new Set([
+            ...current.session.openDocumentIds,
+            ...createdDocuments.map((document) => document.id),
+          ]),
+        ),
+      },
+      browserSaveState: 'saving',
+      lastBrowserSaveAt: savedAt,
+    }));
+
+    await Promise.all([
+      ...createdDocuments.map((document) => persistDocument(document)),
+      persistSession(get().session),
+    ]);
+
+    set({ browserSaveState: 'saved' });
+    scheduleRemoteSync(get, set);
+  },
+
   openDocument: (documentId) => {
     const state = get();
     const exists = state.documents.some((document) => document.id === documentId);
@@ -431,6 +503,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set((current) => ({
       session: {
         ...current.session,
+        selectedFolderId: null,
         activeDocumentId: documentId,
         openDocumentIds: Array.from(
           new Set([...current.session.openDocumentIds, documentId]),
@@ -469,6 +542,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set((current) => ({
       session: {
         ...current.session,
+        selectedFolderId: null,
         activeDocumentId: documentId,
       },
     }));
@@ -480,7 +554,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set((current) => ({
       session: {
         ...current.session,
-        selectedFolderId: folderId,
+        selectedFolderId: folderId ?? ROOT_FOLDER_ID,
       },
     }));
 

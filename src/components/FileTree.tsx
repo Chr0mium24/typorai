@@ -3,6 +3,7 @@ import type {
   FolderRecord,
   TreeFolder,
 } from '../types/workspace';
+import { ROOT_FOLDER_ID } from '../types/workspace';
 import { buildFolderForest, getRootDocuments } from '../lib/tree';
 import {
   ChevronRightIcon,
@@ -102,7 +103,9 @@ const FolderNode = ({
           <div
             key={document.id}
             className={`tree-entry ${
-              activeDocumentId === document.id ? 'is-active' : ''
+              activeDocumentId === document.id && selectedFolderId === null
+                ? 'is-active'
+                : ''
             }`}
           >
             <button
@@ -153,7 +156,7 @@ export const FileTree = ({
     <div className="file-tree">
       <div
         className={`tree-entry ${
-          selectedFolderId === null ? 'is-selected' : ''
+          selectedFolderId === ROOT_FOLDER_ID ? 'is-selected' : ''
         }`}
       >
         <button
@@ -188,7 +191,9 @@ export const FileTree = ({
           <div
             key={document.id}
             className={`tree-entry ${
-              activeDocumentId === document.id ? 'is-active' : ''
+              activeDocumentId === document.id && selectedFolderId === null
+                ? 'is-active'
+                : ''
             }`}
           >
             <button

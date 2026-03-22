@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TabBar } from './components/TabBar';
 import { StatusBar } from './components/StatusBar';
@@ -15,6 +15,8 @@ const promptForName = (label: string, fallback: string) => {
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  const dragDepthRef = useRef(0);
 
   const {
     hydrated,
@@ -30,6 +32,7 @@ function App() {
     createFolder,
     deleteDocument,
     deleteFolder,
+    importMarkdownFiles,
     openDocument,
     closeDocument,
     setActiveDocument,
@@ -83,6 +86,68 @@ function App() {
     setEditorMode,
   ]);
 
+  useEffect(() => {
+    const hasFiles = (event: DragEvent) =>
+      Array.from(event.dataTransfer?.types ?? []).includes('Files');
+
+    const onDragEnter = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current += 1;
+      setDropActive(true);
+    };
+
+    const onDragOver = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'copy';
+      }
+      setDropActive(true);
+    };
+
+    const onDragLeave = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current = Math.max(dragDepthRef.current - 1, 0);
+      if (dragDepthRef.current === 0) {
+        setDropActive(false);
+      }
+    };
+
+    const onDrop = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current = 0;
+      setDropActive(false);
+
+      const droppedFiles = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
+        file.name.toLowerCase().endsWith('.md'),
+      );
+
+      if (droppedFiles.length === 0) return;
+
+      void Promise.all(
+        droppedFiles.map(async (file) => ({
+          name: file.name,
+          markdown: await file.text(),
+        })),
+      ).then((files) => importMarkdownFiles(files));
+    };
+
+    window.addEventListener('dragenter', onDragEnter);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('dragleave', onDragLeave);
+    window.addEventListener('drop', onDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragleave', onDragLeave);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [importMarkdownFiles]);
+
   const activeDocument =
     documents.find((document) => document.id === session.activeDocumentId) ?? null;
 
@@ -106,105 +171,117 @@ function App() {
   }
 
   return (
-    <div
-      className={`app-shell ${
-        session.sidebarCollapsed ? 'is-sidebar-collapsed' : ''
-      }`}
-    >
-      <Sidebar
-        activeDocumentId={session.activeDocumentId}
-        collapsed={session.sidebarCollapsed}
-        documents={documents}
-        folders={folders}
-        mobileOpen={mobileSidebarOpen}
-        selectedFolderId={session.selectedFolderId}
-        onCloseMobile={() => setMobileSidebarOpen(false)}
-        onCreateFolder={() => {
-          const name = promptForName('新文件夹名称', 'New folder');
-          if (name) createFolder(name);
-        }}
-        onDeleteDocument={(documentId) => {
-          const target = documents.find((document) => document.id === documentId);
-          if (!target) return;
-          if (!window.confirm(`删除文档「${target.title}」？`)) return;
-          void deleteDocument(documentId);
-        }}
-        onDeleteFolder={(folderId) => {
-          const target = folders.find((folder) => folder.id === folderId);
-          if (!target) return;
-          if (!window.confirm(`删除文件夹「${target.name}」及其内容？`)) return;
-          void deleteFolder(folderId);
-        }}
-        onOpenDocument={openDocument}
-        onSelectFolder={setSelectedFolder}
-        onToggleFolder={toggleFolderExpanded}
-      />
-
-      <main className="workspace-main">
-        <TabBar
+    <div className="app-frame">
+      <div
+        className={`app-shell ${
+          session.sidebarCollapsed ? 'is-sidebar-collapsed' : ''
+        }`}
+      >
+        <Sidebar
           activeDocumentId={session.activeDocumentId}
-          openDocuments={openDocuments}
-          onCreateDocument={() => {
-            const name = promptForName('新文档标题', 'Untitled note');
-            createDocument(name || 'Untitled note');
+          collapsed={session.sidebarCollapsed}
+          documents={documents}
+          folders={folders}
+          mobileOpen={mobileSidebarOpen}
+          selectedFolderId={session.selectedFolderId}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
+          onCreateFolder={() => {
+            const name = promptForName('新文件夹名称', 'New folder');
+            if (name) createFolder(name);
           }}
-          onActivate={setActiveDocument}
-          onClose={closeDocument}
-          onToggleSidebar={() => {
-            if (window.innerWidth <= 1100) {
-              setMobileSidebarOpen(true);
-              return;
-            }
-            toggleSidebar();
+          onDeleteDocument={(documentId) => {
+            const target = documents.find((document) => document.id === documentId);
+            if (!target) return;
+            if (!window.confirm(`删除文档「${target.title}」？`)) return;
+            void deleteDocument(documentId);
           }}
-          sidebarCollapsed={session.sidebarCollapsed}
+          onDeleteFolder={(folderId) => {
+            const target = folders.find((folder) => folder.id === folderId);
+            if (!target) return;
+            if (!window.confirm(`删除文件夹「${target.name}」及其内容？`)) return;
+            void deleteFolder(folderId);
+          }}
+          onOpenDocument={openDocument}
+          onSelectFolder={setSelectedFolder}
+          onToggleFolder={toggleFolderExpanded}
         />
 
-        <Suspense
-          fallback={
-            <section className="editor-empty">
-              <p className="eyebrow">Loading editor</p>
-              <h2>正在载入编辑器...</h2>
-            </section>
-          }
-        >
-          <EditorPane
-            document={activeDocument}
-            folders={folders}
-            mode={session.editorMode}
-            onChangeMarkdown={(markdown) => {
-              if (!activeDocument) return;
-              updateDocumentMarkdown(activeDocument.id, markdown);
+        <main className="workspace-main">
+          <TabBar
+            activeDocumentId={session.activeDocumentId}
+            openDocuments={openDocuments}
+            onCreateDocument={() => {
+              const name = promptForName('新文档标题', 'Untitled note');
+              createDocument(name || 'Untitled note');
             }}
-            onChangeTitle={(title) => {
-              if (!activeDocument) return;
-              updateDocumentTitle(activeDocument.id, title);
+            onActivate={setActiveDocument}
+            onClose={closeDocument}
+            onToggleSidebar={() => {
+              if (window.innerWidth <= 1100) {
+                setMobileSidebarOpen(true);
+                return;
+              }
+              toggleSidebar();
             }}
-            onCreateDocument={() => createDocument('Untitled note')}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onSyncNow={() => void syncNow()}
-            onToggleMode={() =>
-              setEditorMode(
-                session.editorMode === 'source' ? 'wysiwyg' : 'source',
-              )
-            }
+            sidebarCollapsed={session.sidebarCollapsed}
           />
-        </Suspense>
 
-        <StatusBar
-          browserSaveState={browserSaveState}
-          dirtyDocumentCount={dirtyDocumentCount}
-          lastBrowserSaveAt={lastBrowserSaveAt}
-          syncState={syncState}
+          <Suspense
+            fallback={
+              <section className="editor-empty">
+                <p className="eyebrow">Loading editor</p>
+                <h2>正在载入编辑器...</h2>
+              </section>
+            }
+          >
+            <EditorPane
+              document={activeDocument}
+              folders={folders}
+              mode={session.editorMode}
+              onChangeMarkdown={(markdown) => {
+                if (!activeDocument) return;
+                updateDocumentMarkdown(activeDocument.id, markdown);
+              }}
+              onChangeTitle={(title) => {
+                if (!activeDocument) return;
+                updateDocumentTitle(activeDocument.id, title);
+              }}
+              onCreateDocument={() => createDocument('Untitled note')}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onSyncNow={() => void syncNow()}
+              onToggleMode={() =>
+                setEditorMode(
+                  session.editorMode === 'source' ? 'wysiwyg' : 'source',
+                )
+              }
+            />
+          </Suspense>
+
+          <StatusBar
+            browserSaveState={browserSaveState}
+            dirtyDocumentCount={dirtyDocumentCount}
+            lastBrowserSaveAt={lastBrowserSaveAt}
+            syncState={syncState}
+          />
+        </main>
+
+        <SettingsPanel
+          open={settingsOpen}
+          settings={githubSettings}
+          onClose={() => setSettingsOpen(false)}
+          onSave={updateGithubSettings}
         />
-      </main>
+      </div>
 
-      <SettingsPanel
-        open={settingsOpen}
-        settings={githubSettings}
-        onClose={() => setSettingsOpen(false)}
-        onSave={updateGithubSettings}
-      />
+      {dropActive ? (
+        <div className="drop-overlay">
+          <div className="drop-overlay-card">
+            <p className="eyebrow">Import Markdown</p>
+            <h2>拖到这里导入到当前文件夹</h2>
+            <p>仅接受 `.md` 文件。</p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

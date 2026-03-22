@@ -57,6 +57,8 @@ export type TreeFolder = FolderRecord & {
   documents: DocumentRecord[];
 };
 
+export const ROOT_FOLDER_ID = '__workspace_root__';
+
 export const defaultGithubSettings: GithubSettings = {
   owner: '',
   repo: '',

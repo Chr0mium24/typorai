@@ -50,6 +50,18 @@ export const createDocumentRecord = (
   };
 };
 
+export const createDocumentRecordFromMarkdown = (
+  title: string,
+  markdown: string,
+  parentFolderId: string | null,
+): DocumentRecord => {
+  const document = createDocumentRecord(title, parentFolderId);
+  return {
+    ...document,
+    markdown,
+  };
+};
+
 export const buildDefaultWorkspace = (): {
   documents: DocumentRecord[];
   folders: FolderRecord[];
@@ -89,7 +101,7 @@ export const buildDefaultWorkspace = (): {
     ...defaultWorkspaceSession,
     openDocumentIds: [welcome.id, brief.id],
     activeDocumentId: welcome.id,
-    selectedFolderId: inbox.id,
+    selectedFolderId: null,
   };
 
   return {
@@ -98,4 +110,3 @@ export const buildDefaultWorkspace = (): {
     session,
   };
 };
-

@@ -502,7 +502,7 @@ body {
   border-radius: 12px;
   border: 1px solid rgba(54, 39, 24, 0.08);
   overflow: auto;
-  padding: 0.9rem 1.25rem;
+  padding: 0.65rem 0.9rem;
 }
 
 .editor-stack {

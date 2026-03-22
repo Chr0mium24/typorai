@@ -59,35 +59,30 @@ const emptyPythonResult: PythonResult = {
   error: '',
 };
 
-const allowedCodeLanguages = new Set([
+const preferredLanguageOrder = [
   'Shell',
   'PowerShell',
   'JavaScript',
   'Python',
   'TypeScript',
   'C++',
-]);
+] as const;
 
-const codeBlockLanguages = codeMirrorLanguages.filter((language) =>
-  allowedCodeLanguages.has(language.name),
-);
+const codeBlockLanguages = preferredLanguageOrder
+  .map((name) => codeMirrorLanguages.find((language) => language.name === name) ?? null)
+  .filter((language): language is (typeof codeMirrorLanguages)[number] => Boolean(language));
 
 const languageLabelMap: Record<string, string> = {
-  bash: 'bash',
-  shell: 'bash',
-  powershell: 'powershell',
-  javascript: 'js',
-  js: 'js',
-  python: 'py',
-  py: 'py',
-  typescript: 'ts',
-  ts: 'ts',
-  'c++': 'c++',
-  cpp: 'c++',
+  shell: 'Bash',
+  powershell: 'PowerShell',
+  javascript: 'JavaScript',
+  python: 'Python',
+  typescript: 'TypeScript',
+  'c++': 'C++',
 };
 
 const getLanguageLabel = (language: string) =>
-  languageLabelMap[language.trim().toLowerCase()] ?? language.trim().toLowerCase();
+  languageLabelMap[language.trim().toLowerCase()] ?? language.trim();
 
 const clampRatio = (value: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -219,6 +214,7 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
         [Crepe.Feature.CodeMirror]: {
           languages: codeBlockLanguages,
           renderLanguage: (language) => getLanguageLabel(language),
+          searchPlaceholder: 'Search language',
         },
       },
     });

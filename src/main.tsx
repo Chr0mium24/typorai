@@ -1,8 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import '@milkdown/crepe/theme/nord.css';
 import App from './App';
 import './styles.css';
+import '@milkdown/crepe/theme/nord.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -49,24 +49,6 @@ body {
   height: 100%;
 }
 
-button,
-input {
-  font: inherit;
-}
-
-button {
-  border: 0;
-  cursor: pointer;
-}
-
-input {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 0.85rem 1rem;
-  background: rgba(255, 255, 255, 0.82);
-  color: var(--ink);
-}
-
 .app-shell {
   display: grid;
   grid-template-columns: 272px minmax(0, 1fr);
@@ -169,6 +151,19 @@ input {
 .ghost-button,
 .icon-button,
 .tab-item,
+.tree-action,
+.tree-row,
+.status-pill,
+.editor-title,
+.settings-panel input {
+  font: inherit;
+}
+
+.primary-button,
+.ghost-button,
+.icon-button,
+.tab-item,
+.tree-action,
 .tree-row,
 .status-pill {
   border-radius: 12px;
@@ -183,6 +178,15 @@ input {
   padding: 0.58rem 0.82rem;
   border: 1px solid transparent;
   font-size: 0.88rem;
+}
+
+.primary-button,
+.ghost-button,
+.icon-button,
+.tree-action,
+.tree-row,
+.mobile-backdrop {
+  cursor: pointer;
 }
 
 .icon-button {
@@ -533,21 +537,11 @@ input {
 .editor-card .milkdown-theme-nord,
 .editor-card .ProseMirror {
   min-height: 100%;
-  color: var(--ink);
-  font-family: 'IBM Plex Serif', serif;
 }
 
 .editor-card .ProseMirror {
   min-height: 70vh;
   outline: none;
-  line-height: 1.62;
-  font-size: clamp(0.94rem, 0.45vw + 0.88rem, 1.02rem);
-}
-
-.editor-card .ProseMirror h1,
-.editor-card .ProseMirror h2,
-.editor-card .ProseMirror h3 {
-  font-family: 'IBM Plex Sans', sans-serif;
 }
 
 .python-overlay-layer {
@@ -686,6 +680,14 @@ input {
 .field span {
   font-size: 0.92rem;
   color: var(--muted);
+}
+
+.settings-panel input {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
 }
 
 .mobile-only {

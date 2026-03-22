@@ -181,8 +181,9 @@ input {
 
 .sidebar-tree {
   min-height: 0;
-  overflow: auto;
-  padding-right: 0.25rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.1rem;
   scrollbar-width: none;
 }
 
@@ -198,6 +199,7 @@ input {
 .tree-folder {
   display: grid;
   gap: 0.2rem;
+  min-width: 0;
 }
 
 .tree-entry {
@@ -205,20 +207,22 @@ input {
   align-items: center;
   gap: 0.2rem;
   border-radius: 12px;
+  min-width: 0;
 }
 
 .tree-children {
   display: grid;
   gap: 0.2rem;
-  padding-left: 0.85rem;
+  padding-left: 0.48rem;
 }
 
 .tree-row {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.42rem;
   width: 100%;
-  padding: 0.48rem 0.6rem;
+  min-width: 0;
+  padding: 0.44rem 0.42rem;
   background: transparent;
   color: var(--ink);
   text-align: left;
@@ -259,6 +263,7 @@ input {
 .tree-name {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

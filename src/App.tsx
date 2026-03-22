@@ -59,14 +59,29 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key !== '/') return;
-      event.preventDefault();
-      setEditorMode(session.editorMode === 'source' ? 'wysiwyg' : 'source');
+      if (!(event.metaKey || event.ctrlKey)) return;
+
+      if (event.key === '/') {
+        event.preventDefault();
+        setEditorMode(session.editorMode === 'source' ? 'wysiwyg' : 'source');
+        return;
+      }
+
+      if (event.key.toLowerCase() === 'w') {
+        if (!session.activeDocumentId) return;
+        event.preventDefault();
+        closeDocument(session.activeDocumentId);
+      }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [session.editorMode, setEditorMode]);
+  }, [
+    closeDocument,
+    session.activeDocumentId,
+    session.editorMode,
+    setEditorMode,
+  ]);
 
   const activeDocument =
     documents.find((document) => document.id === session.activeDocumentId) ?? null;

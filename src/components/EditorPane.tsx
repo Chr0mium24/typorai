@@ -500,7 +500,7 @@ const EditorPane = ({
       if (!visualEditorRef.current) return;
       restoreVisualSelection(visualEditorRef.current, sourceSelectionRef.current.ratio);
     });
-  }, [document, mode]);
+  }, [document?.id, mode]);
 
   useEffect(() => {
     if (mode !== 'wysiwyg') return;

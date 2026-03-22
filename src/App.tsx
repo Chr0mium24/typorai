@@ -57,6 +57,17 @@ function App() {
     return () => window.removeEventListener('pagehide', flush);
   }, [flushLocalPersistence]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key !== '/') return;
+      event.preventDefault();
+      setEditorMode(session.editorMode === 'source' ? 'wysiwyg' : 'source');
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [session.editorMode, setEditorMode]);
+
   const activeDocument =
     documents.find((document) => document.id === session.activeDocumentId) ?? null;
 

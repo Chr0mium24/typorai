@@ -34,13 +34,14 @@
 html,
 body,
 #root {
-  min-height: 100%;
+  height: 100%;
   margin: 0;
 }
 
 body {
   min-height: 100vh;
   color: var(--ink);
+  overflow: hidden;
 }
 
 button,
@@ -64,9 +65,10 @@ input {
 .app-shell {
   display: grid;
   grid-template-columns: 272px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
   padding: 0.75rem;
   gap: 0.75rem;
+  overflow: hidden;
 }
 
 .app-shell.is-sidebar-collapsed {
@@ -181,6 +183,11 @@ input {
   min-height: 0;
   overflow: auto;
   padding-right: 0.25rem;
+  scrollbar-width: none;
+}
+
+.sidebar-tree::-webkit-scrollbar {
+  display: none;
 }
 
 .file-tree {
@@ -316,6 +323,11 @@ input {
   gap: 0.32rem;
   overflow-x: auto;
   padding-bottom: 0;
+  scrollbar-width: none;
+}
+
+.tab-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .tab-empty {
@@ -541,6 +553,12 @@ input {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.settings-panel::-webkit-scrollbar {
+  display: none;
 }
 
 .settings-note {
@@ -606,7 +624,7 @@ input {
 @media (max-width: 780px) {
   .workspace-main {
     border-radius: 0;
-    min-height: 100vh;
+    height: 100vh;
   }
 
   .tab-bar,

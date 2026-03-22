@@ -566,6 +566,11 @@ body {
   outline: none;
 }
 
+.editor-card .milkdown .ProseMirror.editor,
+.editor-card .milkdown-theme-nord .ProseMirror.editor {
+  padding: 24px 32px !important;
+}
+
 .python-overlay-layer {
   position: absolute;
   inset: 0;

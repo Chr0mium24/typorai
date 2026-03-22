@@ -72,18 +72,6 @@ const codeBlockLanguages = preferredLanguageOrder
   .map((name) => codeMirrorLanguages.find((language) => language.name === name) ?? null)
   .filter((language): language is (typeof codeMirrorLanguages)[number] => Boolean(language));
 
-const languageLabelMap: Record<string, string> = {
-  shell: 'Bash',
-  powershell: 'PowerShell',
-  javascript: 'JavaScript',
-  python: 'Python',
-  typescript: 'TypeScript',
-  'c++': 'C++',
-};
-
-const getLanguageLabel = (language: string) =>
-  languageLabelMap[language.trim().toLowerCase()] ?? language.trim();
-
 const clampRatio = (value: number) => {
   if (!Number.isFinite(value)) return 0;
   return Math.min(Math.max(value, 0), 1);
@@ -213,7 +201,6 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
       featureConfigs: {
         [Crepe.Feature.CodeMirror]: {
           languages: codeBlockLanguages,
-          renderLanguage: (language) => getLanguageLabel(language),
           searchPlaceholder: 'Search language',
         },
       },

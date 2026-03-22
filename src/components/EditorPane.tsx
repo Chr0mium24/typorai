@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Editor, defaultValueCtx, rootCtx } from '@milkdown/core';
 import { history } from '@milkdown/plugin-history';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
+import { commonmark } from '@milkdown/preset-commonmark';
 import { gfm } from '@milkdown/preset-gfm';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import { nord } from '@milkdown/theme-nord';
@@ -32,6 +33,7 @@ const MilkdownSurface = ({ markdown, onChange }: MilkdownSurfaceProps) => {
         });
       })
       .config(nord)
+      .use(commonmark)
       .use(gfm)
       .use(history)
       .use(listener),

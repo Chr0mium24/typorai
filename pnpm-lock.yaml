@@ -17,6 +17,9 @@ importers:
       '@milkdown/plugin-listener':
         specifier: ^7.11.0
         version: 7.19.1
+      '@milkdown/preset-commonmark':
+        specifier: ^7.11.0
+        version: 7.19.1
       '@milkdown/preset-gfm':
         specifier: ^7.11.0
         version: 7.19.1

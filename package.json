@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@milkdown/core": "^7.11.0",
+    "@milkdown/preset-commonmark": "^7.11.0",
     "@milkdown/plugin-history": "^7.11.0",
     "@milkdown/plugin-listener": "^7.11.0",
     "@milkdown/preset-gfm": "^7.11.0",

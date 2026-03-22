@@ -77,7 +77,11 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell ${
+        session.sidebarCollapsed ? 'is-sidebar-collapsed' : ''
+      }`}
+    >
       <Sidebar
         activeDocumentId={session.activeDocumentId}
         collapsed={session.sidebarCollapsed}

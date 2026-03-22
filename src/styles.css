@@ -451,6 +451,7 @@ input {
 .editor-card {
   min-height: 0;
   flex: 1;
+  position: relative;
   background: var(--paper);
   border-radius: 12px;
   border: 1px solid rgba(54, 39, 24, 0.08);
@@ -506,9 +507,11 @@ input {
   font-family: 'IBM Plex Sans', sans-serif;
 }
 
-.editor-card .ProseMirror pre.python-runnable {
-  position: relative;
-  overflow: visible;
+.python-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
 }
 
 .python-inline-toolbar {
@@ -529,6 +532,7 @@ input {
   background: rgba(23, 17, 13, 0.82);
   color: #fff7ef;
   font: 0.75rem/1 'IBM Plex Sans', sans-serif;
+  pointer-events: auto;
 }
 
 .python-inline-run svg {
@@ -541,11 +545,13 @@ input {
 }
 
 .python-inline-output {
-  margin: 0.45rem 0 0.95rem;
+  position: absolute;
   border-radius: 8px;
   background: rgba(20, 19, 17, 0.94);
   color: #f7efe8;
   overflow: auto;
+  pointer-events: auto;
+  box-shadow: 0 10px 26px rgba(17, 13, 9, 0.22);
 }
 
 .python-inline-output pre {

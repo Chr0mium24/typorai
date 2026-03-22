@@ -14,7 +14,7 @@ import type {
 import { getFolderPath } from '../lib/tree';
 import { runPythonCode } from '../lib/pyodide-runtime';
 import { extractPythonBlocks } from '../lib/python-blocks';
-import { CodeIcon, RefreshIcon, SettingsIcon } from './icons';
+import { CodeIcon, PlayIcon, RefreshIcon, SettingsIcon } from './icons';
 
 type EditorPaneProps = {
   document: DocumentRecord | null;
@@ -45,6 +45,16 @@ type PythonResult = {
   error: string;
 };
 
+type PythonOverlayItem = {
+  id: string;
+  code: string;
+  top: number;
+  left: number;
+  right: number;
+  outputTop: number;
+  width: number;
+};
+
 const emptyPythonResult: PythonResult = {
   status: 'idle',
   output: '',
@@ -67,6 +77,39 @@ const getCursorSnapshot = (
     end: selectionEnd,
     ratio: clampRatio(selectionStart / length),
   };
+};
+
+const getSelectionRatioFromEditor = (container: HTMLDivElement) => {
+  const editor = container.querySelector<HTMLElement>('.ProseMirror');
+  const selection = window.getSelection();
+  if (!editor || !selection || selection.rangeCount === 0) return 0;
+
+  const range = selection.getRangeAt(0);
+  if (!editor.contains(range.startContainer)) return 0;
+
+  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  let totalLength = 0;
+  let beforeLength = 0;
+  let reachedStart = false;
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    const textLength = node.textContent?.length ?? 0;
+
+    if (!reachedStart) {
+      if (node === range.startContainer) {
+        beforeLength += Math.min(range.startOffset, textLength);
+        reachedStart = true;
+      } else {
+        beforeLength += textLength;
+      }
+    }
+
+    totalLength += textLength;
+  }
+
+  if (totalLength === 0) return 0;
+  return clampRatio(beforeLength / totalLength);
 };
 
 const restoreVisualSelection = (container: HTMLDivElement, ratio: number) => {
@@ -120,6 +163,9 @@ const restoreVisualSelection = (container: HTMLDivElement, ratio: number) => {
   }
 };
 
+const getEscapedHtml = (value: string) =>
+  value.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char] ?? char));
+
 const MilkdownSurface = ({ markdown, onChange }: MilkdownSurfaceProps) => {
   useEditor((root) =>
     Editor.make()
@@ -156,29 +202,24 @@ const PythonDecorations = ({
   rootRef,
 }: PythonDecorationsProps) => {
   const [results, setResults] = useState<Record<string, PythonResult>>({});
+  const [items, setItems] = useState<PythonOverlayItem[]>([]);
 
   useEffect(() => {
     if (mode !== 'wysiwyg') return;
 
-    const root = rootRef.current?.querySelector('.ProseMirror');
-    if (!(root instanceof HTMLElement)) return;
-
     const blocks = extractPythonBlocks(markdown);
+    const root = rootRef.current?.querySelector('.ProseMirror');
+    const card = rootRef.current?.closest('.editor-card');
+    if (!(root instanceof HTMLElement) || !(card instanceof HTMLElement)) return;
     let disposed = false;
 
-    const decorate = () => {
+    const measure = () => {
       if (disposed) return;
-
-      root.querySelectorAll('.python-inline-toolbar, .python-inline-output').forEach((node) => {
-        node.remove();
-      });
-
-      root.querySelectorAll('pre.python-runnable').forEach((node) => {
-        node.classList.remove('python-runnable');
-      });
 
       const codeNodes = Array.from(root.querySelectorAll('pre > code'));
       const used = new Set<number>();
+      const cardRect = card.getBoundingClientRect();
+      const nextItems: PythonOverlayItem[] = [];
 
       blocks.forEach((block) => {
         const matchIndex = codeNodes.findIndex((node, index) => {
@@ -194,57 +235,28 @@ const PythonDecorations = ({
         const pre = codeNode.parentElement;
         if (!(pre instanceof HTMLElement)) return;
 
-        pre.classList.add('python-runnable');
+        const preRect = pre.getBoundingClientRect();
+        const top = pre.offsetTop;
+        const left = pre.offsetLeft;
+        const right = Math.max(cardRect.right - preRect.right, 0) + 8;
+        const width = Math.min(pre.clientWidth, Math.max(card.clientWidth - 32, 240));
 
-        const toolbar = document.createElement('div');
-        toolbar.className = 'python-inline-toolbar';
-
-        const runButton = document.createElement('button');
-        const state = results[block.id] ?? emptyPythonResult;
-        runButton.className = `python-inline-run ${state.status}`;
-        runButton.type = 'button';
-        runButton.title = '运行 Python';
-        runButton.innerHTML =
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 6 10 6-10 6z"></path></svg><span>Run</span>';
-        runButton.disabled = state.status === 'running';
-        runButton.onclick = async () => {
-          setResults((current) => ({
-            ...current,
-            [block.id]: {
-              ...emptyPythonResult,
-              status: 'running',
-            },
-          }));
-
-          const result = await runPythonCode(block.code);
-
-          setResults((current) => ({
-            ...current,
-            [block.id]: {
-              status: result.error ? 'error' : 'done',
-              output: result.output,
-              error: result.error ?? '',
-            },
-          }));
-        };
-
-        toolbar.appendChild(runButton);
-        pre.appendChild(toolbar);
-
-        if (state.status !== 'idle') {
-          const output = document.createElement('div');
-          output.className = `python-inline-output ${state.error ? 'has-error' : ''}`;
-          output.innerHTML = `
-            ${state.output ? `<pre>${state.output.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char] ?? char))}</pre>` : ''}
-            ${state.error ? `<pre class="python-inline-error">${state.error.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char] ?? char))}</pre>` : ''}
-          `;
-          pre.insertAdjacentElement('afterend', output);
-        }
+        nextItems.push({
+          id: block.id,
+          code: block.code,
+          top,
+          left,
+          right,
+          outputTop: top + pre.offsetHeight + 8,
+          width,
+        });
       });
+
+      setItems(nextItems);
     };
 
     const observer = new MutationObserver(() => {
-      window.requestAnimationFrame(decorate);
+      window.requestAnimationFrame(measure);
     });
 
     observer.observe(root, {
@@ -252,15 +264,90 @@ const PythonDecorations = ({
       subtree: true,
     });
 
-    window.requestAnimationFrame(decorate);
+    const resizeObserver = new ResizeObserver(() => {
+      window.requestAnimationFrame(measure);
+    });
+
+    resizeObserver.observe(card);
+    window.requestAnimationFrame(measure);
 
     return () => {
       disposed = true;
       observer.disconnect();
+      resizeObserver.disconnect();
+      setItems([]);
     };
-  }, [markdown, mode, results, rootRef]);
+  }, [markdown, mode, rootRef]);
 
-  return null;
+  if (mode !== 'wysiwyg' || items.length === 0) return null;
+
+  return (
+    <div className="python-overlay-layer" aria-hidden="true">
+      {items.map((item) => {
+        const state = results[item.id] ?? emptyPythonResult;
+
+        return (
+          <div className="python-overlay-item" key={item.id}>
+            <div
+              className="python-inline-toolbar"
+              style={{ top: `${item.top + 8}px`, right: `${item.right}px` }}
+            >
+              <button
+                className={`python-inline-run ${state.status}`}
+                disabled={state.status === 'running'}
+                onClick={async () => {
+                  setResults((current) => ({
+                    ...current,
+                    [item.id]: {
+                      ...emptyPythonResult,
+                      status: 'running',
+                    },
+                  }));
+
+                  const result = await runPythonCode(item.code);
+
+                  setResults((current) => ({
+                    ...current,
+                    [item.id]: {
+                      status: result.error ? 'error' : 'done',
+                      output: result.output,
+                      error: result.error ?? '',
+                    },
+                  }));
+                }}
+                title="运行 Python"
+                type="button"
+              >
+                <PlayIcon width={12} height={12} />
+                <span>Run</span>
+              </button>
+            </div>
+
+            {state.status !== 'idle' ? (
+              <div
+                className={`python-inline-output ${state.error ? 'has-error' : ''}`}
+                style={{
+                  top: `${item.outputTop}px`,
+                  left: `${item.left}px`,
+                  width: `${item.width}px`,
+                }}
+              >
+                {state.output ? (
+                  <pre dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.output) }} />
+                ) : null}
+                {state.error ? (
+                  <pre
+                    className="python-inline-error"
+                    dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.error) }}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
 };
 
 const EditorPane = ({
@@ -297,8 +384,11 @@ const EditorPane = ({
     if (mode === 'source') {
       const textarea = sourceEditorRef.current;
       if (!textarea) return;
-      const nextStart = Math.min(sourceSelectionRef.current.start, textarea.value.length);
-      const nextEnd = Math.min(sourceSelectionRef.current.end, textarea.value.length);
+      const target = Math.round(
+        clampRatio(sourceSelectionRef.current.ratio) * textarea.value.length,
+      );
+      const nextStart = Math.min(target, textarea.value.length);
+      const nextEnd = Math.min(target, textarea.value.length);
       window.requestAnimationFrame(() => {
         textarea.focus();
         textarea.setSelectionRange(nextStart, nextEnd);
@@ -311,6 +401,30 @@ const EditorPane = ({
       restoreVisualSelection(visualEditorRef.current, sourceSelectionRef.current.ratio);
     });
   }, [document, mode]);
+
+  useEffect(() => {
+    if (mode !== 'wysiwyg') return;
+    const root = visualEditorRef.current;
+    if (!root) return;
+
+    const updateFromVisual = () => {
+      if (!visualEditorRef.current) return;
+      sourceSelectionRef.current = {
+        ...sourceSelectionRef.current,
+        ratio: getSelectionRatioFromEditor(visualEditorRef.current),
+      };
+    };
+
+    window.document.addEventListener('selectionchange', updateFromVisual);
+    root.addEventListener('keyup', updateFromVisual);
+    root.addEventListener('mouseup', updateFromVisual);
+
+    return () => {
+      window.document.removeEventListener('selectionchange', updateFromVisual);
+      root.removeEventListener('keyup', updateFromVisual);
+      root.removeEventListener('mouseup', updateFromVisual);
+    };
+  }, [document?.id, mode]);
 
   if (!document) {
     return (

@@ -87,6 +87,16 @@ export const persistFolders = async (folders: FolderRecord[]) => {
   await workspaceDB.folders.bulkPut(folders);
 };
 
+export const deleteDocuments = async (documentIds: string[]) => {
+  if (documentIds.length === 0) return;
+  await workspaceDB.documents.bulkDelete(documentIds);
+};
+
+export const deleteFolders = async (folderIds: string[]) => {
+  if (folderIds.length === 0) return;
+  await workspaceDB.folders.bulkDelete(folderIds);
+};
+
 export const persistSession = async (session: WorkspaceSession) => {
   await workspaceDB.settings.put({ id: 'session', value: session });
 };
@@ -94,4 +104,3 @@ export const persistSession = async (session: WorkspaceSession) => {
 export const persistGithubSettings = async (settings: GithubSettings) => {
   await workspaceDB.settings.put({ id: 'github', value: settings });
 };
-

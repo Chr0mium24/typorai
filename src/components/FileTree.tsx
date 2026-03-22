@@ -4,6 +4,12 @@ import type {
   TreeFolder,
 } from '../types/workspace';
 import { buildFolderForest, getRootDocuments } from '../lib/tree';
+import {
+  ChevronRightIcon,
+  FileTextIcon,
+  FolderIcon,
+  TrashIcon,
+} from './icons';
 
 type FileTreeProps = {
   folders: FolderRecord[];
@@ -13,6 +19,8 @@ type FileTreeProps = {
   onOpenDocument: (documentId: string) => void;
   onToggleFolder: (folderId: string) => void;
   onSelectFolder: (folderId: string | null) => void;
+  onDeleteDocument: (documentId: string) => void;
+  onDeleteFolder: (folderId: string) => void;
 };
 
 type FolderNodeProps = {
@@ -22,6 +30,8 @@ type FolderNodeProps = {
   onOpenDocument: (documentId: string) => void;
   onToggleFolder: (folderId: string) => void;
   onSelectFolder: (folderId: string) => void;
+  onDeleteDocument: (documentId: string) => void;
+  onDeleteFolder: (folderId: string) => void;
 };
 
 const FolderNode = ({
@@ -31,27 +41,47 @@ const FolderNode = ({
   onOpenDocument,
   onToggleFolder,
   onSelectFolder,
+  onDeleteDocument,
+  onDeleteFolder,
 }: FolderNodeProps) => (
   <div className="tree-folder">
-    <button
-      className={`tree-row tree-folder-row ${
+    <div
+      className={`tree-entry ${
         selectedFolderId === folder.id ? 'is-selected' : ''
       }`}
-      onClick={() => onSelectFolder(folder.id)}
-      type="button"
     >
-      <span
-        className={`tree-caret ${folder.expanded ? 'is-open' : ''}`}
+      <button
+        className="tree-row tree-folder-row"
+        onClick={() => onSelectFolder(folder.id)}
+        type="button"
+      >
+        <span
+          className={`tree-caret ${folder.expanded ? 'is-open' : ''}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFolder(folder.id);
+          }}
+        >
+          <ChevronRightIcon width={14} height={14} />
+        </span>
+        <span className="tree-icon">
+          <FolderIcon width={14} height={14} />
+        </span>
+        <span className="tree-name">{folder.name}</span>
+      </button>
+
+      <button
+        className="tree-action"
         onClick={(event) => {
           event.stopPropagation();
-          onToggleFolder(folder.id);
+          onDeleteFolder(folder.id);
         }}
+        title="删除文件夹"
+        type="button"
       >
-        ▸
-      </span>
-      <span className="tree-icon">◻</span>
-      <span className="tree-name">{folder.name}</span>
-    </button>
+        <TrashIcon width={14} height={14} />
+      </button>
+    </div>
 
     {folder.expanded ? (
       <div className="tree-children">
@@ -62,24 +92,43 @@ const FolderNode = ({
             folder={childFolder}
             selectedFolderId={selectedFolderId}
             onOpenDocument={onOpenDocument}
+            onDeleteDocument={onDeleteDocument}
+            onDeleteFolder={onDeleteFolder}
             onSelectFolder={onSelectFolder}
             onToggleFolder={onToggleFolder}
           />
         ))}
         {folder.documents.map((document) => (
-          <button
+          <div
             key={document.id}
-            className={`tree-row tree-document-row ${
+            className={`tree-entry ${
               activeDocumentId === document.id ? 'is-active' : ''
             }`}
-            onClick={() => onOpenDocument(document.id)}
-            type="button"
           >
-            <span className="tree-caret is-placeholder" />
-            <span className="tree-icon">✦</span>
-            <span className="tree-name">{document.title}</span>
-            {document.remoteDirty ? <span className="tree-dirty-dot" /> : null}
-          </button>
+            <button
+              className="tree-row tree-document-row"
+              onClick={() => onOpenDocument(document.id)}
+              type="button"
+            >
+              <span className="tree-caret is-placeholder" />
+              <span className="tree-icon">
+                <FileTextIcon width={14} height={14} />
+              </span>
+              <span className="tree-name">{document.title}</span>
+              {document.remoteDirty ? <span className="tree-dirty-dot" /> : null}
+            </button>
+            <button
+              className="tree-action"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDeleteDocument(document.id);
+              }}
+              title="删除文档"
+              type="button"
+            >
+              <TrashIcon width={14} height={14} />
+            </button>
+          </div>
         ))}
       </div>
     ) : null}
@@ -94,23 +143,31 @@ export const FileTree = ({
   onOpenDocument,
   onToggleFolder,
   onSelectFolder,
+  onDeleteDocument,
+  onDeleteFolder,
 }: FileTreeProps) => {
   const forest = buildFolderForest(folders, documents);
   const rootDocuments = getRootDocuments(folders, documents);
 
   return (
     <div className="file-tree">
-      <button
-        className={`tree-row tree-folder-row ${
+      <div
+        className={`tree-entry ${
           selectedFolderId === null ? 'is-selected' : ''
         }`}
-        onClick={() => onSelectFolder(null)}
-        type="button"
       >
-        <span className="tree-caret is-placeholder" />
-        <span className="tree-icon">⌂</span>
-        <span className="tree-name">Workspace</span>
-      </button>
+        <button
+          className="tree-row tree-folder-row"
+          onClick={() => onSelectFolder(null)}
+          type="button"
+        >
+          <span className="tree-caret is-placeholder" />
+          <span className="tree-icon">
+            <FolderIcon width={14} height={14} />
+          </span>
+          <span className="tree-name">Workspace</span>
+        </button>
+      </div>
 
       <div className="tree-children">
         {forest.map((folder) => (
@@ -120,28 +177,46 @@ export const FileTree = ({
             folder={folder}
             selectedFolderId={selectedFolderId}
             onOpenDocument={onOpenDocument}
+            onDeleteDocument={onDeleteDocument}
+            onDeleteFolder={onDeleteFolder}
             onSelectFolder={onSelectFolder}
             onToggleFolder={onToggleFolder}
           />
         ))}
 
         {rootDocuments.map((document) => (
-          <button
+          <div
             key={document.id}
-            className={`tree-row tree-document-row ${
+            className={`tree-entry ${
               activeDocumentId === document.id ? 'is-active' : ''
             }`}
-            onClick={() => onOpenDocument(document.id)}
-            type="button"
           >
-            <span className="tree-caret is-placeholder" />
-            <span className="tree-icon">✦</span>
-            <span className="tree-name">{document.title}</span>
-            {document.remoteDirty ? <span className="tree-dirty-dot" /> : null}
-          </button>
+            <button
+              className="tree-row tree-document-row"
+              onClick={() => onOpenDocument(document.id)}
+              type="button"
+            >
+              <span className="tree-caret is-placeholder" />
+              <span className="tree-icon">
+                <FileTextIcon width={14} height={14} />
+              </span>
+              <span className="tree-name">{document.title}</span>
+              {document.remoteDirty ? <span className="tree-dirty-dot" /> : null}
+            </button>
+            <button
+              className="tree-action"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDeleteDocument(document.id);
+              }}
+              title="删除文档"
+              type="button"
+            >
+              <TrashIcon width={14} height={14} />
+            </button>
+          </div>
         ))}
       </div>
     </div>
   );
 };
-

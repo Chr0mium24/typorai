@@ -4,6 +4,7 @@ import { TabBar } from './components/TabBar';
 import { StatusBar } from './components/StatusBar';
 import { SettingsPanel } from './components/SettingsPanel';
 import { useWorkspaceStore } from './store/workspace-store';
+import { MenuIcon, RefreshIcon, SettingsIcon } from './components/icons';
 
 const EditorPane = lazy(() => import('./components/EditorPane'));
 
@@ -28,6 +29,8 @@ function App() {
     initialize,
     createDocument,
     createFolder,
+    deleteDocument,
+    deleteFolder,
     openDocument,
     closeDocument,
     setActiveDocument,
@@ -98,8 +101,19 @@ function App() {
           const name = promptForName('新文件夹名称', 'New folder');
           if (name) createFolder(name);
         }}
+        onDeleteDocument={(documentId) => {
+          const target = documents.find((document) => document.id === documentId);
+          if (!target) return;
+          if (!window.confirm(`删除文档「${target.title}」？`)) return;
+          void deleteDocument(documentId);
+        }}
+        onDeleteFolder={(folderId) => {
+          const target = folders.find((folder) => folder.id === folderId);
+          if (!target) return;
+          if (!window.confirm(`删除文件夹「${target.name}」及其内容？`)) return;
+          void deleteFolder(folderId);
+        }}
         onOpenDocument={openDocument}
-        onOpenSettings={() => setSettingsOpen(true)}
         onSelectFolder={setSelectedFolder}
         onToggleFolder={toggleFolderExpanded}
         onToggleSidebar={toggleSidebar}
@@ -109,28 +123,37 @@ function App() {
         <header className="workspace-toolbar">
           <div className="toolbar-left">
             <button
-              className="ghost-button mobile-only"
+              className="icon-button mobile-only"
               onClick={() => setMobileSidebarOpen(true)}
+              title="打开文件树"
               type="button"
             >
-              文件
+              <MenuIcon width={16} height={16} />
             </button>
-            <div>
-              <p className="eyebrow">Local-first Markdown Studio</p>
-              <h2>{activeDocument?.title ?? 'TyporAI'}</h2>
+            <div className="toolbar-brand">
+              <p className="eyebrow">TyporAI</p>
+              <span className="toolbar-summary">
+                {openDocuments.length} tabs · {documents.length} docs
+              </span>
             </div>
           </div>
 
           <div className="toolbar-actions">
             <button
-              className="ghost-button desktop-only"
+              className="icon-button"
               onClick={() => setSettingsOpen(true)}
+              title="GitHub 设置"
               type="button"
             >
-              GitHub 设置
+              <SettingsIcon width={16} height={16} />
             </button>
-            <button className="primary-button" onClick={() => void syncNow()} type="button">
-              立即同步
+            <button
+              className="icon-button"
+              onClick={() => void syncNow()}
+              title="立即同步"
+              type="button"
+            >
+              <RefreshIcon width={16} height={16} />
             </button>
           </div>
         </header>
@@ -170,7 +193,6 @@ function App() {
           dirtyDocumentCount={dirtyDocumentCount}
           lastBrowserSaveAt={lastBrowserSaveAt}
           syncState={syncState}
-          onSyncNow={syncNow}
         />
       </main>
 

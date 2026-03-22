@@ -1,5 +1,11 @@
 import { FileTree } from './FileTree';
 import type { DocumentRecord, FolderRecord } from '../types/workspace';
+import {
+  FilePlusIcon,
+  FolderPlusIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+} from './icons';
 
 type SidebarProps = {
   collapsed: boolean;
@@ -14,7 +20,8 @@ type SidebarProps = {
   onOpenDocument: (documentId: string) => void;
   onToggleFolder: (folderId: string) => void;
   onSelectFolder: (folderId: string | null) => void;
-  onOpenSettings: () => void;
+  onDeleteDocument: (documentId: string) => void;
+  onDeleteFolder: (folderId: string) => void;
   onCloseMobile: () => void;
 };
 
@@ -31,64 +38,108 @@ export const Sidebar = ({
   onOpenDocument,
   onToggleFolder,
   onSelectFolder,
-  onOpenSettings,
+  onDeleteDocument,
+  onDeleteFolder,
   onCloseMobile,
-}: SidebarProps) => (
-  <>
-    <aside
-      className={`sidebar ${collapsed ? 'is-collapsed' : ''} ${
-        mobileOpen ? 'is-mobile-open' : ''
-      }`}
-    >
-      <div className="sidebar-header">
-        <div>
-          <p className="eyebrow">Writer Workspace</p>
-          <h1>TyporAI</h1>
+}: SidebarProps) => {
+  if (collapsed && !mobileOpen) {
+    return (
+      <aside className="sidebar is-collapsed">
+        <div className="sidebar-rail">
+          <button
+            className="icon-button"
+            onClick={onToggleSidebar}
+            title="展开侧边栏"
+            type="button"
+          >
+            <PanelLeftOpenIcon width={16} height={16} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={onCreateDocument}
+            title="新建文档"
+            type="button"
+          >
+            <FilePlusIcon width={16} height={16} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={onCreateFolder}
+            title="新建文件夹"
+            type="button"
+          >
+            <FolderPlusIcon width={16} height={16} />
+          </button>
         </div>
-        <button className="ghost-button" onClick={onToggleSidebar} type="button">
-          {collapsed ? '展开' : '收起'}
-        </button>
-      </div>
+      </aside>
+    );
+  }
 
-      <div className="sidebar-actions">
-        <button className="primary-button" onClick={onCreateDocument} type="button">
-          新建文档
-        </button>
-        <button className="ghost-button" onClick={onCreateFolder} type="button">
-          新建文件夹
-        </button>
-      </div>
+  return (
+    <>
+      <aside
+        className={`sidebar ${mobileOpen ? 'is-mobile-open' : ''}`}
+      >
+        <div className="sidebar-header">
+          <div>
+            <p className="eyebrow">Workspace</p>
+            <h1>TyporAI</h1>
+          </div>
+          <button
+            className="icon-button"
+            onClick={onToggleSidebar}
+            title="收起侧边栏"
+            type="button"
+          >
+            <PanelLeftCloseIcon width={16} height={16} />
+          </button>
+        </div>
 
-      <div className="sidebar-tree">
-        <FileTree
-          activeDocumentId={activeDocumentId}
-          documents={documents}
-          folders={folders}
-          selectedFolderId={selectedFolderId}
-          onOpenDocument={(documentId) => {
-            onOpenDocument(documentId);
-            onCloseMobile();
-          }}
-          onSelectFolder={onSelectFolder}
-          onToggleFolder={onToggleFolder}
+        <div className="sidebar-actions">
+          <button
+            className="icon-button"
+            onClick={onCreateDocument}
+            title="新建文档"
+            type="button"
+          >
+            <FilePlusIcon width={16} height={16} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={onCreateFolder}
+            title="新建文件夹"
+            type="button"
+          >
+            <FolderPlusIcon width={16} height={16} />
+          </button>
+        </div>
+
+        <div className="sidebar-tree">
+          <FileTree
+            activeDocumentId={activeDocumentId}
+            documents={documents}
+            folders={folders}
+            selectedFolderId={selectedFolderId}
+            onDeleteDocument={onDeleteDocument}
+            onDeleteFolder={onDeleteFolder}
+            onOpenDocument={(documentId) => {
+              onOpenDocument(documentId);
+              onCloseMobile();
+            }}
+            onSelectFolder={onSelectFolder}
+            onToggleFolder={onToggleFolder}
+          />
+        </div>
+      </aside>
+
+      {mobileOpen ? (
+        <button
+          className="mobile-backdrop"
+          onClick={onCloseMobile}
+          type="button"
+          aria-label="关闭文件面板"
         />
-      </div>
-
-      <div className="sidebar-footer">
-        <button className="ghost-button" onClick={onOpenSettings} type="button">
-          GitHub 设置
-        </button>
-      </div>
-    </aside>
-
-    {mobileOpen ? (
-      <button
-        className="mobile-backdrop"
-        onClick={onCloseMobile}
-        type="button"
-        aria-label="关闭文件面板"
-      />
-    ) : null}
-  </>
-);
-
+      ) : null}
+    </>
+  );
+};

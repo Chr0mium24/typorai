@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import {
+  deleteDocuments,
+  deleteFolders,
   loadWorkspaceSnapshot,
   persistDocument,
   persistFolders,
@@ -205,6 +207,26 @@ const resolveParentFolderId = (
   return activeDocument?.parentFolderId ?? null;
 };
 
+const collectFolderIds = (folderId: string, folders: FolderRecord[]) => {
+  const ids = new Set<string>();
+  const walk = (currentId: string) => {
+    ids.add(currentId);
+    folders
+      .filter((folder) => folder.parentId === currentId)
+      .forEach((folder) => walk(folder.id));
+  };
+  walk(folderId);
+  return ids;
+};
+
+const clearDocumentTimer = (documentId: string) => {
+  const timer = documentSaveTimers.get(documentId);
+  if (timer) {
+    window.clearTimeout(timer);
+    documentSaveTimers.delete(documentId);
+  }
+};
+
 type BrowserSaveState = 'idle' | 'saving' | 'saved';
 
 export type WorkspaceStore = {
@@ -220,6 +242,8 @@ export type WorkspaceStore = {
   initialize: () => Promise<void>;
   createDocument: (title?: string, parentFolderId?: string | null) => void;
   createFolder: (name: string, parentFolderId?: string | null) => void;
+  deleteDocument: (documentId: string) => Promise<void>;
+  deleteFolder: (folderId: string) => Promise<void>;
   openDocument: (documentId: string) => void;
   closeDocument: (documentId: string) => void;
   setActiveDocument: (documentId: string) => void;
@@ -320,6 +344,82 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
     void persistFolders([folder]);
     saveSessionSoon(get, set);
+  },
+
+  deleteDocument: async (documentId) => {
+    const state = get();
+    const nextDocuments = state.documents.filter((document) => document.id !== documentId);
+    const nextOpenDocumentIds = state.session.openDocumentIds.filter(
+      (id) => id !== documentId,
+    );
+    const fallbackActiveDocumentId =
+      nextOpenDocumentIds[nextOpenDocumentIds.length - 1] ??
+      nextDocuments[nextDocuments.length - 1]?.id ??
+      null;
+
+    clearDocumentTimer(documentId);
+
+    set({
+      documents: nextDocuments,
+      session: {
+        ...state.session,
+        openDocumentIds: nextOpenDocumentIds,
+        activeDocumentId:
+          state.session.activeDocumentId === documentId
+            ? fallbackActiveDocumentId
+            : state.session.activeDocumentId,
+      },
+    });
+
+    await Promise.all([deleteDocuments([documentId]), persistSession(get().session)]);
+    scheduleRemoteSync(get, set);
+  },
+
+  deleteFolder: async (folderId) => {
+    const state = get();
+    const targetFolder = state.folders.find((folder) => folder.id === folderId);
+    if (!targetFolder) return;
+
+    const folderIds = collectFolderIds(folderId, state.folders);
+    const documentIds = state.documents
+      .filter((document) => document.parentFolderId && folderIds.has(document.parentFolderId))
+      .map((document) => document.id);
+
+    documentIds.forEach(clearDocumentTimer);
+
+    const nextFolders = state.folders.filter((folder) => !folderIds.has(folder.id));
+    const nextDocuments = state.documents.filter(
+      (document) => !documentIds.includes(document.id),
+    );
+    const nextOpenDocumentIds = state.session.openDocumentIds.filter(
+      (id) => !documentIds.includes(id),
+    );
+    const fallbackActiveDocumentId =
+      nextOpenDocumentIds[nextOpenDocumentIds.length - 1] ??
+      nextDocuments[nextDocuments.length - 1]?.id ??
+      null;
+
+    set({
+      folders: nextFolders,
+      documents: nextDocuments,
+      session: {
+        ...state.session,
+        openDocumentIds: nextOpenDocumentIds,
+        activeDocumentId: documentIds.includes(state.session.activeDocumentId ?? '')
+          ? fallbackActiveDocumentId
+          : state.session.activeDocumentId,
+        selectedFolderId: folderIds.has(state.session.selectedFolderId ?? '')
+          ? targetFolder.parentId
+          : state.session.selectedFolderId,
+      },
+    });
+
+    await Promise.all([
+      deleteDocuments(documentIds),
+      deleteFolders(Array.from(folderIds)),
+      persistSession(get().session),
+    ]);
+    scheduleRemoteSync(get, set);
   },
 
   openDocument: (documentId) => {
@@ -610,4 +710,3 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }));
   },
 }));
-

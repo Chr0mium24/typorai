@@ -6,7 +6,6 @@ type StatusBarProps = {
   lastBrowserSaveAt?: string;
   dirtyDocumentCount: number;
   syncState: SyncState;
-  onSyncNow: () => Promise<void>;
 };
 
 const formatPastTime = (timestamp?: string) => {
@@ -55,7 +54,6 @@ export const StatusBar = ({
   lastBrowserSaveAt,
   dirtyDocumentCount,
   syncState,
-  onSyncNow,
 }: StatusBarProps) => {
   const [, setTick] = useState(0);
 
@@ -83,14 +81,6 @@ export const StatusBar = ({
         </span>
         <span className="status-pill">{getSyncLabel(syncState)}</span>
       </div>
-
-      <button
-        className="primary-button status-sync-button"
-        onClick={() => void onSyncNow()}
-        type="button"
-      >
-        立即同步
-      </button>
     </footer>
   );
 };

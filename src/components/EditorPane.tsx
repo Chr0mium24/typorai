@@ -2,7 +2,6 @@ import { Fragment, type RefObject, useEffect, useMemo, useRef, useState } from '
 import { createPortal } from 'react-dom';
 import { languages as codeMirrorLanguages } from '@codemirror/language-data';
 import { Crepe } from '@milkdown/crepe';
-import { codeMirror } from '@milkdown/crepe/feature/code-mirror';
 import type {
   DocumentRecord,
   FolderRecord,
@@ -72,6 +71,23 @@ const preferredLanguageOrder = [
 const codeBlockLanguages = preferredLanguageOrder
   .map((name) => codeMirrorLanguages.find((language) => language.name === name) ?? null)
   .filter((language): language is (typeof codeMirrorLanguages)[number] => Boolean(language));
+const allowedCodeBlockLanguages = new Set<string>(preferredLanguageOrder);
+
+const pruneLanguageLists = (container: HTMLElement) => {
+  const lists = container.querySelectorAll<HTMLElement>('.language-list');
+  for (const list of lists) {
+    const seenLanguages = new Set<string>();
+    const items = list.querySelectorAll<HTMLElement>('.language-list-item');
+    for (const item of items) {
+      const languageName = item.dataset.language?.trim() ?? item.textContent?.trim() ?? '';
+      if (!allowedCodeBlockLanguages.has(languageName) || seenLanguages.has(languageName)) {
+        item.remove();
+        continue;
+      }
+      seenLanguages.add(languageName);
+    }
+  }
+};
 
 const clampRatio = (value: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -198,13 +214,13 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
         [Crepe.Feature.Toolbar]: false,
         [Crepe.Feature.BlockEdit]: false,
         [Crepe.Feature.ImageBlock]: false,
-        [Crepe.Feature.CodeMirror]: false,
       },
-    });
-
-    crepe.addFeature(codeMirror, {
-      languages: codeBlockLanguages,
-      searchPlaceholder: 'Search language',
+      featureConfigs: {
+        [Crepe.Feature.CodeMirror]: {
+          languages: codeBlockLanguages,
+          searchPlaceholder: 'Search language',
+        },
+      },
     });
 
     crepe.on((api) => {
@@ -214,6 +230,18 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
     });
 
     await crepe.create();
+    pruneLanguageLists(root);
+
+    const languageListObserver = new MutationObserver(() => {
+      pruneLanguageLists(root);
+    });
+    languageListObserver.observe(root, {
+      childList: true,
+      subtree: true,
+    });
+
+    (crepe as Crepe & { __languageListObserver?: MutationObserver }).__languageListObserver =
+      languageListObserver;
     crepeRef.current = crepe;
     return crepe;
   };
@@ -231,6 +259,7 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
       const crepe = crepeRef.current;
       crepeRef.current = null;
       if (crepe) {
+        (crepe as Crepe & { __languageListObserver?: MutationObserver }).__languageListObserver?.disconnect();
         void crepe.destroy();
       }
       if (rootRef.current) {

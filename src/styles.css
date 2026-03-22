@@ -569,9 +569,20 @@ body {
   outline: none;
 }
 
+.visual-pane {
+  position: relative;
+}
+
 .editor-card .milkdown .ProseMirror.editor,
 .editor-card .milkdown-theme-nord .ProseMirror.editor {
   padding: 14px 18px !important;
+}
+
+.python-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
 }
 
 .python-inline-run {
@@ -597,7 +608,22 @@ body {
   flex: none;
 }
 
+.python-inline-run-overlay {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 7;
+  padding: 0.32rem 0.52rem;
+  border-radius: 999px;
+  background: rgba(255, 250, 244, 0.96);
+  border: 1px solid rgba(63, 45, 29, 0.14);
+  color: var(--ink);
+  box-shadow: 0 6px 18px rgba(17, 13, 9, 0.12);
+}
+
 .python-inline-output {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 6;
   margin: 0.55rem 0 0;
   border-radius: 10px;
   border: 1px solid rgba(36, 28, 22, 0.08);
@@ -605,10 +631,6 @@ body {
   color: #f7efe8;
   overflow: auto;
   box-shadow: 0 10px 26px rgba(17, 13, 9, 0.22);
-}
-
-.milkdown .milkdown-code-block .python-inline-output {
-  width: 100%;
 }
 
 .python-inline-output pre {
@@ -625,6 +647,19 @@ body {
 
 .python-inline-error {
   color: #ffd5cc;
+}
+
+.milkdown .language-list .language-list-item:not([data-language='Shell']):not([data-language='PowerShell']):not([data-language='JavaScript']):not([data-language='Python']):not([data-language='TypeScript']):not([data-language='C++']) {
+  display: none !important;
+}
+
+.milkdown .language-list .language-list-item[data-language='Shell'] ~ .language-list-item[data-language='Shell'],
+.milkdown .language-list .language-list-item[data-language='PowerShell'] ~ .language-list-item[data-language='PowerShell'],
+.milkdown .language-list .language-list-item[data-language='JavaScript'] ~ .language-list-item[data-language='JavaScript'],
+.milkdown .language-list .language-list-item[data-language='Python'] ~ .language-list-item[data-language='Python'],
+.milkdown .language-list .language-list-item[data-language='TypeScript'] ~ .language-list-item[data-language='TypeScript'],
+.milkdown .language-list .language-list-item[data-language='C++'] ~ .language-list-item[data-language='C++'] {
+  display: none !important;
 }
 
 .source-editor {

@@ -1,5 +1,4 @@
 import { Fragment, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { languages as codeMirrorLanguages } from '@codemirror/language-data';
 import { Crepe } from '@milkdown/crepe';
 import type {
@@ -45,8 +44,11 @@ type PythonResult = {
 type PythonOverlayItem = {
   id: string;
   code: string;
-  buttonHost: HTMLElement | null;
-  outputHost: HTMLElement | null;
+  runTop: number;
+  runLeft: number;
+  outputTop: number;
+  outputLeft: number;
+  outputWidth: number;
 };
 
 const emptyPythonResult: PythonResult = {
@@ -67,24 +69,6 @@ const preferredLanguageOrder = [
 const codeBlockLanguages = preferredLanguageOrder
   .map((name) => codeMirrorLanguages.find((language) => language.name === name) ?? null)
   .filter((language): language is (typeof codeMirrorLanguages)[number] => Boolean(language));
-const allowedCodeBlockLanguages = new Set<string>(preferredLanguageOrder);
-
-const pruneLanguageLists = (container: HTMLElement) => {
-  const lists = container.querySelectorAll<HTMLElement>('.language-list');
-  for (const list of lists) {
-    const seenLanguages = new Set<string>();
-    const items = list.querySelectorAll<HTMLElement>('.language-list-item');
-    for (const item of items) {
-      const languageName = item.dataset.language?.trim() ?? item.textContent?.trim() ?? '';
-      if (!allowedCodeBlockLanguages.has(languageName) || seenLanguages.has(languageName)) {
-        item.remove();
-        continue;
-      }
-      seenLanguages.add(languageName);
-    }
-  }
-};
-
 const clampRatio = (value: number) => {
   if (!Number.isFinite(value)) return 0;
   return Math.min(Math.max(value, 0), 1);
@@ -229,18 +213,6 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
 
     await crepe.create();
     editorMarkdownRef.current = defaultValue;
-    pruneLanguageLists(root);
-
-    const languageListObserver = new MutationObserver(() => {
-      pruneLanguageLists(root);
-    });
-    languageListObserver.observe(root, {
-      childList: true,
-      subtree: true,
-    });
-
-    (crepe as Crepe & { __languageListObserver?: MutationObserver }).__languageListObserver =
-      languageListObserver;
     crepeRef.current = crepe;
     return crepe;
   };
@@ -258,7 +230,6 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
       const crepe = crepeRef.current;
       crepeRef.current = null;
       if (crepe) {
-        (crepe as Crepe & { __languageListObserver?: MutationObserver }).__languageListObserver?.disconnect();
         void crepe.destroy();
       }
     };
@@ -273,7 +244,6 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
 
     let cancelled = false;
     crepeRef.current = null;
-    (current as Crepe & { __languageListObserver?: MutationObserver }).__languageListObserver?.disconnect();
 
     void current.destroy().then(async () => {
       if (cancelled || !rootRef.current) return;
@@ -310,7 +280,8 @@ const PythonDecorations = ({
 
     const blocks = extractPythonBlocks(markdown);
     const root = rootRef.current?.querySelector('.ProseMirror');
-    if (!(root instanceof HTMLElement)) return;
+    const host = rootRef.current;
+    if (!(root instanceof HTMLElement) || !(host instanceof HTMLElement)) return;
     let disposed = false;
 
     const measure = () => {
@@ -338,16 +309,21 @@ const PythonDecorations = ({
           codeNode.closest<HTMLElement>('pre');
         if (!(blockRoot instanceof HTMLElement)) return;
 
+        const hostRect = host.getBoundingClientRect();
         const blockRect = blockRoot.getBoundingClientRect();
         const codeBlock = blockRoot.closest<HTMLElement>('.milkdown-code-block');
-        const buttonHost =
+        const toolGroup =
           codeBlock?.querySelector<HTMLElement>('.tools .tools-button-group') ?? null;
+        const toolRect = toolGroup?.getBoundingClientRect() ?? blockRect;
 
         nextItems.push({
           id: block.id,
           code: block.code,
-          buttonHost,
-          outputHost: codeBlock,
+          runTop: toolRect.top - hostRect.top,
+          runLeft: toolRect.right - hostRect.left + 8,
+          outputTop: blockRect.bottom - hostRect.top + 8,
+          outputLeft: blockRect.left - hostRect.left,
+          outputWidth: blockRect.width,
         });
       });
 
@@ -381,67 +357,70 @@ const PythonDecorations = ({
   if (mode !== 'wysiwyg' || items.length === 0) return null;
 
   return (
-    <>
+    <div className="python-overlay-layer">
       {items.map((item) => {
         const state = results[item.id] ?? emptyPythonResult;
 
         return (
           <Fragment key={item.id}>
-            {item.buttonHost
-              ? createPortal(
-                  <button
-                    className={`python-inline-run ${state.status}`}
-                    disabled={state.status === 'running'}
-                    onClick={async () => {
-                      setResults((current) => ({
-                        ...current,
-                        [item.id]: {
-                          ...emptyPythonResult,
-                          status: 'running',
-                        },
-                      }));
+            <button
+              className={`python-inline-run python-inline-run-overlay ${state.status}`}
+              disabled={state.status === 'running'}
+              onClick={async () => {
+                setResults((current) => ({
+                  ...current,
+                  [item.id]: {
+                    ...emptyPythonResult,
+                    status: 'running',
+                  },
+                }));
 
-                      const result = await runPythonCode(item.code);
+                const result = await runPythonCode(item.code);
 
-                      setResults((current) => ({
-                        ...current,
-                        [item.id]: {
-                          status: result.error ? 'error' : 'done',
-                          output: result.output,
-                          error: result.error ?? '',
-                        },
-                      }));
-                    }}
-                    title="运行 Python"
-                    type="button"
-                  >
-                    <PlayIcon width={12} height={12} />
-                    <span>Run</span>
-                  </button>,
-                  item.buttonHost,
-                )
-              : null}
+                setResults((current) => ({
+                  ...current,
+                  [item.id]: {
+                    status: result.error ? 'error' : 'done',
+                    output: result.output,
+                    error: result.error ?? '',
+                  },
+                }));
+              }}
+              style={{
+                top: `${item.runTop}px`,
+                left: `${item.runLeft}px`,
+              }}
+              title="运行 Python"
+              type="button"
+            >
+              <PlayIcon width={12} height={12} />
+              <span>Run</span>
+            </button>
 
-            {state.status !== 'idle' && item.outputHost
-              ? createPortal(
-                  <div className={`python-inline-output ${state.error ? 'has-error' : ''}`}>
-                    {state.output ? (
-                      <pre dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.output) }} />
-                    ) : null}
-                    {state.error ? (
-                      <pre
-                        className="python-inline-error"
-                        dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.error) }}
-                      />
-                    ) : null}
-                  </div>,
-                  item.outputHost,
-                )
-              : null}
+            {state.status !== 'idle' ? (
+              <div
+                className={`python-inline-output ${state.error ? 'has-error' : ''}`}
+                style={{
+                  top: `${item.outputTop}px`,
+                  left: `${item.outputLeft}px`,
+                  width: `${item.outputWidth}px`,
+                }}
+              >
+                {state.output ? (
+                  <pre dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.output) }} />
+                ) : null}
+                {state.error ? (
+                  <pre
+                    className="python-inline-error"
+                    dangerouslySetInnerHTML={{ __html: getEscapedHtml(state.error) }}
+                  />
+                ) : null}
+              </div>
+            ) : null}
           </Fragment>
         );
       })}
-    </>
+    </div>
   );
 };
 

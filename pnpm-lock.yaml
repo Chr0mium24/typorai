@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@codemirror/language-data':
+        specifier: ^6.5.2
+        version: 6.5.2
       '@milkdown/core':
         specifier: ^7.11.0
         version: 7.19.1

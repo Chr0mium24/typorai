@@ -1,4 +1,6 @@
-import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { languages as codeMirrorLanguages } from '@codemirror/language-data';
 import { Crepe } from '@milkdown/crepe';
 import type {
   DocumentRecord,
@@ -43,6 +45,7 @@ type PythonResult = {
 type PythonOverlayItem = {
   id: string;
   code: string;
+  buttonHost: HTMLElement | null;
   top: number;
   left: number;
   right: number;
@@ -55,6 +58,36 @@ const emptyPythonResult: PythonResult = {
   output: '',
   error: '',
 };
+
+const allowedCodeLanguages = new Set([
+  'Shell',
+  'PowerShell',
+  'JavaScript',
+  'Python',
+  'TypeScript',
+  'C++',
+]);
+
+const codeBlockLanguages = codeMirrorLanguages.filter((language) =>
+  allowedCodeLanguages.has(language.name),
+);
+
+const languageLabelMap: Record<string, string> = {
+  bash: 'bash',
+  shell: 'bash',
+  powershell: 'powershell',
+  javascript: 'js',
+  js: 'js',
+  python: 'py',
+  py: 'py',
+  typescript: 'ts',
+  ts: 'ts',
+  'c++': 'c++',
+  cpp: 'c++',
+};
+
+const getLanguageLabel = (language: string) =>
+  languageLabelMap[language.trim().toLowerCase()] ?? language.trim().toLowerCase();
 
 const clampRatio = (value: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -182,6 +215,12 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
         [Crepe.Feature.BlockEdit]: false,
         [Crepe.Feature.ImageBlock]: false,
       },
+      featureConfigs: {
+        [Crepe.Feature.CodeMirror]: {
+          languages: codeBlockLanguages,
+          renderLanguage: (language) => getLanguageLabel(language),
+        },
+      },
     });
 
     crepe.on((api) => {
@@ -290,6 +329,9 @@ const PythonDecorations = ({
         if (!(blockRoot instanceof HTMLElement)) return;
 
         const blockRect = blockRoot.getBoundingClientRect();
+        const codeBlock = blockRoot.closest<HTMLElement>('.milkdown-code-block');
+        const buttonHost =
+          codeBlock?.querySelector<HTMLElement>('.tools .tools-button-group') ?? null;
         const top = blockRoot.offsetTop;
         const left = blockRoot.offsetLeft;
         const right = Math.max(cardRect.right - blockRect.right, 0) + 8;
@@ -301,6 +343,7 @@ const PythonDecorations = ({
         nextItems.push({
           id: block.id,
           code: block.code,
+          buttonHost,
           top,
           left,
           right,
@@ -339,46 +382,46 @@ const PythonDecorations = ({
   if (mode !== 'wysiwyg' || items.length === 0) return null;
 
   return (
-    <div className="python-overlay-layer" aria-hidden="true">
+    <div className="python-overlay-layer">
       {items.map((item) => {
         const state = results[item.id] ?? emptyPythonResult;
 
         return (
-          <div className="python-overlay-item" key={item.id}>
-            <div
-              className="python-inline-toolbar"
-              style={{ top: `${item.top + 8}px`, right: `${item.right}px` }}
-            >
-              <button
-                className={`python-inline-run ${state.status}`}
-                disabled={state.status === 'running'}
-                onClick={async () => {
-                  setResults((current) => ({
-                    ...current,
-                    [item.id]: {
-                      ...emptyPythonResult,
-                      status: 'running',
-                    },
-                  }));
+          <Fragment key={item.id}>
+            {item.buttonHost
+              ? createPortal(
+                  <button
+                    className={`python-inline-run ${state.status}`}
+                    disabled={state.status === 'running'}
+                    onClick={async () => {
+                      setResults((current) => ({
+                        ...current,
+                        [item.id]: {
+                          ...emptyPythonResult,
+                          status: 'running',
+                        },
+                      }));
 
-                  const result = await runPythonCode(item.code);
+                      const result = await runPythonCode(item.code);
 
-                  setResults((current) => ({
-                    ...current,
-                    [item.id]: {
-                      status: result.error ? 'error' : 'done',
-                      output: result.output,
-                      error: result.error ?? '',
-                    },
-                  }));
-                }}
-                title="运行 Python"
-                type="button"
-              >
-                <PlayIcon width={12} height={12} />
-                <span>Run</span>
-              </button>
-            </div>
+                      setResults((current) => ({
+                        ...current,
+                        [item.id]: {
+                          status: result.error ? 'error' : 'done',
+                          output: result.output,
+                          error: result.error ?? '',
+                        },
+                      }));
+                    }}
+                    title="运行 Python"
+                    type="button"
+                  >
+                    <PlayIcon width={12} height={12} />
+                    <span>Run</span>
+                  </button>,
+                  item.buttonHost,
+                )
+              : null}
 
             {state.status !== 'idle' ? (
               <div
@@ -400,7 +443,7 @@ const PythonDecorations = ({
                 ) : null}
               </div>
             ) : null}
-          </div>
+          </Fragment>
         );
       })}
     </div>

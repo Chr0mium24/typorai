@@ -498,11 +498,11 @@ body {
   min-height: 0;
   flex: 1;
   position: relative;
-  background: var(--paper);
+  background: rgba(248, 241, 231, 0.96);
   border-radius: 12px;
   border: 1px solid rgba(54, 39, 24, 0.08);
   overflow: auto;
-  padding: 0.68rem 0.82rem;
+  padding: 0.9rem 1.25rem;
 }
 
 .editor-stack {
@@ -530,13 +530,35 @@ body {
 
 .editor-surface {
   min-height: 100%;
-  max-width: 860px;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
 }
 
 .editor-card .milkdown,
 .editor-card .milkdown-theme-nord,
 .editor-card .ProseMirror {
   min-height: 100%;
+}
+
+.editor-card .milkdown,
+.editor-card .milkdown-theme-nord {
+  --crepe-color-background: #faf4eb;
+  --crepe-color-on-background: #241c16;
+  --crepe-color-surface: #f4ece1;
+  --crepe-color-surface-low: #ece1d2;
+  --crepe-color-on-surface: #241c16;
+  --crepe-color-on-surface-variant: #6a5b4e;
+  --crepe-color-outline: #a39382;
+  --crepe-color-primary: #9a4c2d;
+  --crepe-color-secondary: #e5d7c6;
+  --crepe-color-on-secondary: #241c16;
+  --crepe-color-hover: #e7dac9;
+  --crepe-color-selected: #dfd0bd;
+  --crepe-color-inline-code: #ab4421;
+  --crepe-font-title: 'IBM Plex Serif', serif;
+  --crepe-font-default: 'IBM Plex Sans', sans-serif;
+  --crepe-font-code: 'SFMono-Regular', 'Menlo', 'Consolas', monospace;
 }
 
 .editor-card .ProseMirror {
@@ -551,39 +573,34 @@ body {
   z-index: 4;
 }
 
-.python-inline-toolbar {
-  position: absolute;
-  top: 0.45rem;
-  right: 0.45rem;
-  z-index: 3;
-}
-
 .python-inline-run {
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
-  height: 26px;
-  padding: 0 0.55rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(23, 17, 13, 0.82);
-  color: #fff7ef;
-  font: 0.75rem/1 'IBM Plex Sans', sans-serif;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: 600 12px/16px 'IBM Plex Sans', sans-serif;
   pointer-events: auto;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group .python-inline-run.running,
+.milkdown .milkdown-code-block .tools .tools-button-group .python-inline-run:disabled {
+  opacity: 1;
+  filter: saturate(0.7);
 }
 
 .python-inline-run svg {
   width: 12px;
   height: 12px;
-}
-
-.python-inline-run.running {
-  opacity: 0.75;
+  flex: none;
 }
 
 .python-inline-output {
   position: absolute;
-  border-radius: 8px;
+  z-index: 3;
+  border-radius: 10px;
+  border: 1px solid rgba(36, 28, 22, 0.08);
   background: rgba(20, 19, 17, 0.94);
   color: #f7efe8;
   overflow: auto;

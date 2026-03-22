@@ -2,6 +2,7 @@ import { Fragment, type RefObject, useEffect, useMemo, useRef, useState } from '
 import { createPortal } from 'react-dom';
 import { languages as codeMirrorLanguages } from '@codemirror/language-data';
 import { Crepe } from '@milkdown/crepe';
+import { codeMirror } from '@milkdown/crepe/feature/code-mirror';
 import type {
   DocumentRecord,
   FolderRecord,
@@ -197,13 +198,13 @@ const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) =
         [Crepe.Feature.Toolbar]: false,
         [Crepe.Feature.BlockEdit]: false,
         [Crepe.Feature.ImageBlock]: false,
+        [Crepe.Feature.CodeMirror]: false,
       },
-      featureConfigs: {
-        [Crepe.Feature.CodeMirror]: {
-          languages: codeBlockLanguages,
-          searchPlaceholder: 'Search language',
-        },
-      },
+    });
+
+    crepe.addFeature(codeMirror, {
+      languages: codeBlockLanguages,
+      searchPlaceholder: 'Search language',
     });
 
     crepe.on((api) => {

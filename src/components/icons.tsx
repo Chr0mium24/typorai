@@ -44,6 +44,13 @@ export const FilePlusIcon = (props: IconProps) => (
   </svg>
 );
 
+export const PlusIcon = (props: IconProps) => (
+  <svg aria-hidden="true" {...baseProps} {...props}>
+    <path d="M12 5v14" />
+    <path d="M5 12h14" />
+  </svg>
+);
+
 export const FolderPlusIcon = (props: IconProps) => (
   <svg aria-hidden="true" {...baseProps} {...props}>
     <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -63,6 +70,14 @@ export const RefreshIcon = (props: IconProps) => (
   <svg aria-hidden="true" {...baseProps} {...props}>
     <path d="M21 12a9 9 0 1 1-2.64-6.36" />
     <path d="M21 3v6h-6" />
+  </svg>
+);
+
+export const DownloadIcon = (props: IconProps) => (
+  <svg aria-hidden="true" {...baseProps} {...props}>
+    <path d="M12 4v11" />
+    <path d="m7 11 5 5 5-5" />
+    <path d="M5 20h14" />
   </svg>
 );
 

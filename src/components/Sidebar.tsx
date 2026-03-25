@@ -8,6 +8,8 @@ type SidebarProps = {
   folders: FolderRecord[];
   documents: DocumentRecord[];
   activeDocumentId: string | null;
+  animatedDocumentId: string | null;
+  animatedFolderId: string | null;
   selectedFolderId: string | null;
   onCreateFolder: () => void;
   onOpenDocument: (documentId: string) => void;
@@ -24,6 +26,8 @@ export const Sidebar = ({
   folders,
   documents,
   activeDocumentId,
+  animatedDocumentId,
+  animatedFolderId,
   selectedFolderId,
   onCreateFolder,
   onOpenDocument,
@@ -33,14 +37,15 @@ export const Sidebar = ({
   onDeleteFolder,
   onCloseMobile,
 }: SidebarProps) => {
-  if (collapsed && !mobileOpen) {
-    return null;
-  }
+  const desktopCollapsed = collapsed && !mobileOpen;
 
   return (
     <>
       <aside
-        className={`sidebar ${mobileOpen ? 'is-mobile-open' : ''}`}
+        aria-hidden={desktopCollapsed}
+        className={`sidebar ${mobileOpen ? 'is-mobile-open' : ''} ${
+          desktopCollapsed ? 'is-collapsed-desktop' : ''
+        }`}
       >
         <div className="sidebar-header">
           <div>
@@ -60,6 +65,8 @@ export const Sidebar = ({
         <div className="sidebar-tree">
           <FileTree
             activeDocumentId={activeDocumentId}
+            animatedDocumentId={animatedDocumentId}
+            animatedFolderId={animatedFolderId}
             documents={documents}
             folders={folders}
             selectedFolderId={selectedFolderId}

@@ -16,6 +16,8 @@ type FileTreeProps = {
   folders: FolderRecord[];
   documents: DocumentRecord[];
   activeDocumentId: string | null;
+  animatedDocumentId: string | null;
+  animatedFolderId: string | null;
   selectedFolderId: string | null;
   onOpenDocument: (documentId: string) => void;
   onToggleFolder: (folderId: string) => void;
@@ -27,6 +29,8 @@ type FileTreeProps = {
 type FolderNodeProps = {
   folder: TreeFolder;
   activeDocumentId: string | null;
+  animatedDocumentId: string | null;
+  animatedFolderId: string | null;
   selectedFolderId: string | null;
   onOpenDocument: (documentId: string) => void;
   onToggleFolder: (folderId: string) => void;
@@ -38,6 +42,8 @@ type FolderNodeProps = {
 const FolderNode = ({
   folder,
   activeDocumentId,
+  animatedDocumentId,
+  animatedFolderId,
   selectedFolderId,
   onOpenDocument,
   onToggleFolder,
@@ -49,7 +55,7 @@ const FolderNode = ({
     <div
       className={`tree-entry ${
         selectedFolderId === folder.id ? 'is-selected' : ''
-      }`}
+      } ${animatedFolderId === folder.id ? 'is-fresh' : ''}`}
     >
       <button
         className="tree-row tree-folder-row"
@@ -90,6 +96,8 @@ const FolderNode = ({
           <FolderNode
             key={childFolder.id}
             activeDocumentId={activeDocumentId}
+            animatedDocumentId={animatedDocumentId}
+            animatedFolderId={animatedFolderId}
             folder={childFolder}
             selectedFolderId={selectedFolderId}
             onOpenDocument={onOpenDocument}
@@ -106,7 +114,7 @@ const FolderNode = ({
               activeDocumentId === document.id && selectedFolderId === null
                 ? 'is-active'
                 : ''
-            }`}
+            } ${animatedDocumentId === document.id ? 'is-fresh' : ''}`}
           >
             <button
               className="tree-row tree-document-row"
@@ -142,6 +150,8 @@ export const FileTree = ({
   folders,
   documents,
   activeDocumentId,
+  animatedDocumentId,
+  animatedFolderId,
   selectedFolderId,
   onOpenDocument,
   onToggleFolder,
@@ -177,6 +187,8 @@ export const FileTree = ({
           <FolderNode
             key={folder.id}
             activeDocumentId={activeDocumentId}
+            animatedDocumentId={animatedDocumentId}
+            animatedFolderId={animatedFolderId}
             folder={folder}
             selectedFolderId={selectedFolderId}
             onOpenDocument={onOpenDocument}
@@ -194,7 +206,7 @@ export const FileTree = ({
               activeDocumentId === document.id && selectedFolderId === null
                 ? 'is-active'
                 : ''
-            }`}
+            } ${animatedDocumentId === document.id ? 'is-fresh' : ''}`}
           >
             <button
               className="tree-row tree-document-row"

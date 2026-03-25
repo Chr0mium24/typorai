@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SyncState } from '../types/workspace';
 
 type StatusBarProps = {
-  browserSaveState: 'idle' | 'saving' | 'saved';
-  lastBrowserSaveAt?: string;
   dirtyDocumentCount: number;
   syncState: SyncState;
 };
 
 const formatPastTime = (timestamp?: string) => {
-  if (!timestamp) return '尚未保存';
+  if (!timestamp) return '刚刚';
   const distanceMs = Date.now() - new Date(timestamp).getTime();
   const minutes = Math.max(Math.round(distanceMs / 60000), 0);
 
@@ -50,8 +48,6 @@ const getSyncLabel = (syncState: SyncState) => {
 };
 
 export const StatusBar = ({
-  browserSaveState,
-  lastBrowserSaveAt,
   dirtyDocumentCount,
   syncState,
 }: StatusBarProps) => {
@@ -62,18 +58,9 @@ export const StatusBar = ({
     return () => window.clearInterval(timer);
   }, []);
 
-  const browserLabel = useMemo(() => {
-    if (browserSaveState === 'saving') return '正在保存到浏览器';
-    if (browserSaveState === 'saved') {
-      return `浏览器已保存 · ${formatPastTime(lastBrowserSaveAt)}`;
-    }
-    return '等待编辑';
-  }, [browserSaveState, lastBrowserSaveAt]);
-
   return (
     <footer className="status-bar">
       <div className="status-group">
-        <span className="status-pill">{browserLabel}</span>
         <span className="status-pill">
           {dirtyDocumentCount > 0
             ? `${dirtyDocumentCount} 个文档待同步`

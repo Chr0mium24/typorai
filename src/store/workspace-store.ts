@@ -243,8 +243,8 @@ export type WorkspaceStore = {
   lastBrowserSaveAt?: string;
   lastSessionPersistAt?: string;
   initialize: () => Promise<void>;
-  createDocument: (title?: string, parentFolderId?: string | null) => void;
-  createFolder: (name: string, parentFolderId?: string | null) => void;
+  createDocument: (title?: string, parentFolderId?: string | null) => string;
+  createFolder: (name: string, parentFolderId?: string | null) => string;
   deleteDocument: (documentId: string) => Promise<void>;
   deleteFolder: (folderId: string) => Promise<void>;
   importMarkdownFiles: (
@@ -343,6 +343,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     saveDocumentSoon(document.id, get, set);
     saveSessionSoon(get, set);
     scheduleRemoteSync(get, set);
+    return document.id;
   },
 
   createFolder: (name, parentFolderId) => {
@@ -364,6 +365,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
     void persistFolders([folder]);
     saveSessionSoon(get, set);
+    return folder.id;
   },
 
   deleteDocument: async (documentId) => {

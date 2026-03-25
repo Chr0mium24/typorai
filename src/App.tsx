@@ -12,11 +12,28 @@ const promptForName = (label: string, fallback: string) => {
   return value?.trim() ?? '';
 };
 
+const getMarkdownFilename = (title: string, slug: string) => {
+  const sanitized = title
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/\.+$/, '');
+
+  const baseName = sanitized || slug || 'untitled';
+  return baseName.toLowerCase().endsWith('.md') ? baseName : `${baseName}.md`;
+};
+
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
+  const [animatedDocumentId, setAnimatedDocumentId] = useState<string | null>(null);
+  const [animatedFolderId, setAnimatedFolderId] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
+  const animationTimerRef = useRef<{
+    document?: number;
+    folder?: number;
+  }>({});
 
   const {
     hydrated,
@@ -59,6 +76,18 @@ function App() {
     window.addEventListener('pagehide', flush);
     return () => window.removeEventListener('pagehide', flush);
   }, [flushLocalPersistence]);
+
+  useEffect(
+    () => () => {
+      if (animationTimerRef.current.document) {
+        window.clearTimeout(animationTimerRef.current.document);
+      }
+      if (animationTimerRef.current.folder) {
+        window.clearTimeout(animationTimerRef.current.folder);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -161,6 +190,49 @@ function App() {
 
   const dirtyDocumentCount = documents.filter((document) => document.remoteDirty).length;
 
+  const animateFreshItem = (type: 'document' | 'folder', id: string) => {
+    const timerKey = type === 'document' ? 'document' : 'folder';
+    const setter = type === 'document' ? setAnimatedDocumentId : setAnimatedFolderId;
+    const existingTimer = animationTimerRef.current[timerKey];
+
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+    }
+
+    setter(id);
+    animationTimerRef.current[timerKey] = window.setTimeout(() => {
+      setter((current) => (current === id ? null : current));
+      animationTimerRef.current[timerKey] = undefined;
+    }, 900);
+  };
+
+  const handleCreateDocument = (title = 'Untitled note') => {
+    const documentId = createDocument(title);
+    animateFreshItem('document', documentId);
+  };
+
+  const handleCreateFolder = (name: string) => {
+    const folderId = createFolder(name);
+    animateFreshItem('folder', folderId);
+  };
+
+  const exportActiveDocument = () => {
+    if (!activeDocument) return;
+
+    const blob = new Blob([activeDocument.markdown], {
+      type: 'text/markdown;charset=utf-8',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = window.document.createElement('a');
+
+    link.href = url;
+    link.download = getMarkdownFilename(activeDocument.title, activeDocument.slug);
+    window.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   if (!hydrated) {
     return (
       <div className="app-loading">
@@ -179,6 +251,8 @@ function App() {
       >
         <Sidebar
           activeDocumentId={session.activeDocumentId}
+          animatedDocumentId={animatedDocumentId}
+          animatedFolderId={animatedFolderId}
           collapsed={session.sidebarCollapsed}
           documents={documents}
           folders={folders}
@@ -187,7 +261,7 @@ function App() {
           onCloseMobile={() => setMobileSidebarOpen(false)}
           onCreateFolder={() => {
             const name = promptForName('新文件夹名称', 'New folder');
-            if (name) createFolder(name);
+            if (name) handleCreateFolder(name);
           }}
           onDeleteDocument={(documentId) => {
             const target = documents.find((document) => document.id === documentId);
@@ -209,13 +283,26 @@ function App() {
         <main className="workspace-main">
           <TabBar
             activeDocumentId={session.activeDocumentId}
+            animatedDocumentId={animatedDocumentId}
+            browserSaveState={browserSaveState}
+            lastBrowserSaveAt={lastBrowserSaveAt}
+            mode={session.editorMode}
             openDocuments={openDocuments}
             onCreateDocument={() => {
               const name = promptForName('新文档标题', 'Untitled note');
-              createDocument(name || 'Untitled note');
+              handleCreateDocument(name || 'Untitled note');
             }}
             onActivate={setActiveDocument}
             onClose={closeDocument}
+            onExportDocument={exportActiveDocument}
+            exportDisabled={!activeDocument}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onSyncNow={() => void syncNow()}
+            onToggleMode={() =>
+              setEditorMode(
+                session.editorMode === 'source' ? 'wysiwyg' : 'source',
+              )
+            }
             onToggleSidebar={() => {
               if (window.innerWidth <= 1100) {
                 setMobileSidebarOpen(true);
@@ -235,6 +322,7 @@ function App() {
             }
           >
             <EditorPane
+              createdDocumentId={animatedDocumentId}
               document={activeDocument}
               folders={folders}
               mode={session.editorMode}
@@ -246,21 +334,12 @@ function App() {
                 if (!activeDocument) return;
                 updateDocumentTitle(activeDocument.id, title);
               }}
-              onCreateDocument={() => createDocument('Untitled note')}
-              onOpenSettings={() => setSettingsOpen(true)}
-              onSyncNow={() => void syncNow()}
-              onToggleMode={() =>
-                setEditorMode(
-                  session.editorMode === 'source' ? 'wysiwyg' : 'source',
-                )
-              }
+              onCreateDocument={() => handleCreateDocument('Untitled note')}
             />
           </Suspense>
 
           <StatusBar
-            browserSaveState={browserSaveState}
             dirtyDocumentCount={dirtyDocumentCount}
-            lastBrowserSaveAt={lastBrowserSaveAt}
             syncState={syncState}
           />
         </main>

@@ -11,16 +11,32 @@ import { getFolderPath } from '../lib/tree';
 import { restoreDisplayMathMarkdown } from '../lib/markdown-math';
 import { runPythonCode } from '../lib/pyodide-runtime';
 import { extractPythonBlocks } from '../lib/python-blocks';
-import { PlayIcon } from './icons';
+import {
+  CodeIcon,
+  DownloadIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+  PlayIcon,
+  RefreshIcon,
+  SettingsIcon,
+} from './icons';
 
 type EditorPaneProps = {
   document: DocumentRecord | null;
-  createdDocumentId: string | null;
   folders: FolderRecord[];
+  browserSaveState: 'idle' | 'saving' | 'saved';
+  lastBrowserSaveAt?: string;
   mode: WorkspaceSession['editorMode'];
+  sidebarCollapsed: boolean;
   onChangeTitle: (title: string) => void;
   onChangeMarkdown: (markdown: string) => void;
   onCreateDocument: () => void;
+  onExportDocument: () => void;
+  exportDisabled?: boolean;
+  onOpenSettings: () => void;
+  onSyncNow: () => void;
+  onToggleMode: () => void;
+  onToggleSidebar: () => void;
 };
 
 type MilkdownSurfaceProps = {
@@ -448,6 +464,17 @@ const restoreVisualSelection = (
 const getEscapedHtml = (value: string) =>
   value.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char] ?? char));
 
+const formatPastTime = (timestamp?: string) => {
+  if (!timestamp) return '尚未保存';
+  const distanceMs = Date.now() - new Date(timestamp).getTime();
+  const minutes = Math.max(Math.round(distanceMs / 60000), 0);
+
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} 小时前`;
+};
+
 const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const crepeRef = useRef<Crepe | null>(null);
@@ -746,12 +773,20 @@ const PythonDecorations = ({
 
 const EditorPane = ({
   document,
-  createdDocumentId,
   folders,
+  browserSaveState,
+  lastBrowserSaveAt,
   mode,
+  sidebarCollapsed,
   onChangeTitle,
   onChangeMarkdown,
   onCreateDocument,
+  onExportDocument,
+  exportDisabled = false,
+  onOpenSettings,
+  onSyncNow,
+  onToggleMode,
+  onToggleSidebar,
 }: EditorPaneProps) => {
   const sourceEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const visualEditorRef = useRef<HTMLDivElement | null>(null);
@@ -765,7 +800,7 @@ const EditorPane = ({
   });
   const [documentMotion, setDocumentMotion] = useState<{
     key: number;
-    type: 'idle' | 'switch' | 'create';
+    type: 'idle' | 'switch';
   }>({
     key: 0,
     type: 'idle',
@@ -775,6 +810,14 @@ const EditorPane = ({
     if (!document) return [];
     return getFolderPath(document.parentFolderId, folders);
   }, [document, folders]);
+  const saveLabel =
+    browserSaveState === 'saving'
+      ? '保存中'
+      : browserSaveState === 'saved'
+        ? lastBrowserSaveAt
+          ? `已保存 ${formatPastTime(lastBrowserSaveAt)}`
+          : '已保存'
+        : '等待编辑';
 
   useEffect(() => {
     markdownMapRef.current = buildMarkdownTextMap(document?.markdown ?? '');
@@ -797,10 +840,10 @@ const EditorPane = ({
 
     setDocumentMotion((current) => ({
       key: current.key + 1,
-      type: nextDocumentId === createdDocumentId ? 'create' : 'switch',
+      type: 'switch',
     }));
     previousDocumentIdRef.current = nextDocumentId;
-  }, [createdDocumentId, document?.id]);
+  }, [document?.id]);
 
   useEffect(() => {
     markdownMapRef.current = buildMarkdownTextMap(document?.markdown ?? '');
@@ -880,14 +923,24 @@ const EditorPane = ({
   return (
     <section className="editor-pane">
       <div
-        key={`${document.id}-${documentMotion.key}`}
         className={`editor-document-frame ${
-          documentMotion.type === 'create'
-            ? 'is-created'
-            : documentMotion.type === 'switch'
-              ? 'is-switching'
-              : ''
+          documentMotion.type === 'switch' ? 'is-switching' : ''
         }`}
+        onAnimationEnd={() => {
+          setDocumentMotion((current) =>
+            current.type === 'idle' ? current : { ...current, type: 'idle' },
+          );
+        }}
+        style={
+          documentMotion.type === 'idle'
+            ? undefined
+            : {
+                animationName:
+                  documentMotion.key % 2 === 0
+                    ? 'editor-document-switch'
+                    : 'editor-document-switch-alt',
+              }
+        }
       >
         <div className="editor-header">
           <div className="editor-meta">
@@ -900,6 +953,54 @@ const EditorPane = ({
               onChange={(event) => onChangeTitle(event.target.value)}
               placeholder="文档标题"
             />
+          </div>
+          <div className="editor-header-actions">
+            <span className={`tab-save-indicator is-${browserSaveState}`}>{saveLabel}</span>
+            <button
+              className="icon-button"
+              disabled={exportDisabled}
+              onClick={onExportDocument}
+              title={exportDisabled ? '没有可导出的文档' : '导出 Markdown'}
+              type="button"
+            >
+              <DownloadIcon width={16} height={16} />
+            </button>
+            <button
+              className="icon-button"
+              onClick={onSyncNow}
+              title="立即同步"
+              type="button"
+            >
+              <RefreshIcon width={16} height={16} />
+            </button>
+            <button
+              className={`icon-button ${mode === 'source' ? 'is-active' : ''}`}
+              onClick={onToggleMode}
+              title={mode === 'source' ? '切回可视编辑' : '切换到源码模式'}
+              type="button"
+            >
+              <CodeIcon width={16} height={16} />
+            </button>
+            <button
+              className="icon-button"
+              onClick={onToggleSidebar}
+              title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+              type="button"
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpenIcon width={16} height={16} />
+              ) : (
+                <PanelLeftCloseIcon width={16} height={16} />
+              )}
+            </button>
+            <button
+              className="icon-button"
+              onClick={onOpenSettings}
+              title="GitHub 设置"
+              type="button"
+            >
+              <SettingsIcon width={16} height={16} />
+            </button>
           </div>
         </div>
 

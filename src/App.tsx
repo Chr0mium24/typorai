@@ -284,9 +284,6 @@ function App() {
           <TabBar
             activeDocumentId={session.activeDocumentId}
             animatedDocumentId={animatedDocumentId}
-            browserSaveState={browserSaveState}
-            lastBrowserSaveAt={lastBrowserSaveAt}
-            mode={session.editorMode}
             openDocuments={openDocuments}
             onCreateDocument={() => {
               const name = promptForName('新文档标题', 'Untitled note');
@@ -294,23 +291,6 @@ function App() {
             }}
             onActivate={setActiveDocument}
             onClose={closeDocument}
-            onExportDocument={exportActiveDocument}
-            exportDisabled={!activeDocument}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onSyncNow={() => void syncNow()}
-            onToggleMode={() =>
-              setEditorMode(
-                session.editorMode === 'source' ? 'wysiwyg' : 'source',
-              )
-            }
-            onToggleSidebar={() => {
-              if (window.innerWidth <= 1100) {
-                setMobileSidebarOpen(true);
-                return;
-              }
-              toggleSidebar();
-            }}
-            sidebarCollapsed={session.sidebarCollapsed}
           />
 
           <Suspense
@@ -322,10 +302,12 @@ function App() {
             }
           >
             <EditorPane
-              createdDocumentId={animatedDocumentId}
               document={activeDocument}
               folders={folders}
+              browserSaveState={browserSaveState}
+              lastBrowserSaveAt={lastBrowserSaveAt}
               mode={session.editorMode}
+              sidebarCollapsed={session.sidebarCollapsed}
               onChangeMarkdown={(markdown) => {
                 if (!activeDocument) return;
                 updateDocumentMarkdown(activeDocument.id, markdown);
@@ -335,6 +317,22 @@ function App() {
                 updateDocumentTitle(activeDocument.id, title);
               }}
               onCreateDocument={() => handleCreateDocument('Untitled note')}
+              onExportDocument={exportActiveDocument}
+              exportDisabled={!activeDocument}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onSyncNow={() => void syncNow()}
+              onToggleMode={() =>
+                setEditorMode(
+                  session.editorMode === 'source' ? 'wysiwyg' : 'source',
+                )
+              }
+              onToggleSidebar={() => {
+                if (window.innerWidth <= 1100) {
+                  setMobileSidebarOpen(true);
+                  return;
+                }
+                toggleSidebar();
+              }}
             />
           </Suspense>
 

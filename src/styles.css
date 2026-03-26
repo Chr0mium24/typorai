@@ -632,12 +632,22 @@ body {
   min-width: 0;
 }
 
+.editor-stack.is-source {
+  min-height: 0;
+  height: 100%;
+}
+
 .editor-mode-pane {
   grid-area: 1 / 1;
+  min-height: 0;
   min-width: 0;
   transition:
     opacity 180ms ease,
     transform 180ms ease;
+}
+
+.editor-stack.is-source .source-pane {
+  height: 100%;
 }
 
 .editor-mode-pane.is-hidden {
@@ -832,10 +842,12 @@ body {
 }
 
 .source-editor {
+  display: block;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  min-height: 70vh;
+  min-height: 0;
+  height: 100%;
   border: 0;
   resize: none;
   background: transparent;

@@ -172,7 +172,9 @@ body {
 .tree-row,
 .status-pill,
 .editor-title,
-.settings-panel input {
+.settings-panel input,
+.settings-panel select,
+.settings-panel textarea {
   font: inherit;
 }
 
@@ -626,6 +628,10 @@ body {
   padding: 0.45rem 0.55rem;
 }
 
+.editor-card.is-source-mode {
+  overflow: hidden;
+}
+
 .editor-stack {
   display: grid;
   min-height: 72vh;
@@ -860,6 +866,54 @@ body {
   tab-size: 2;
 }
 
+.ai-selection-trigger {
+  position: absolute;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.48rem 0.68rem;
+  border: 1px solid rgba(181, 79, 44, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 249, 242, 0.96);
+  color: var(--accent-strong);
+  box-shadow: 0 12px 24px rgba(31, 20, 14, 0.14);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+}
+
+.ai-selection-trigger:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.ai-selection-trigger kbd {
+  padding: 0.12rem 0.34rem;
+  border: 1px solid rgba(63, 45, 29, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font: 0.72rem/1 'SFMono-Regular', 'Menlo', 'Consolas', monospace;
+}
+
+.settings-panel input,
+.settings-panel select,
+.settings-panel textarea {
+  width: 100%;
+  min-width: 0;
+}
+.settings-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.settings-section-heading h3 {
+  margin: 0.18rem 0 0;
+  font-size: 0.98rem;
+}
+
 .status-bar {
   padding: 0.42rem 0.85rem 0.58rem;
   border-top: 1px solid var(--line);
@@ -912,6 +966,12 @@ body {
   color: var(--muted);
 }
 
+.settings-section {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.2rem;
+}
+
 .field {
   display: grid;
   gap: 0.5rem;
@@ -922,12 +982,19 @@ body {
   color: var(--muted);
 }
 
-.settings-panel input {
+.settings-panel input,
+.settings-panel select,
+.settings-panel textarea {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 0.85rem 1rem;
   background: rgba(255, 255, 255, 0.82);
   color: var(--ink);
+}
+
+.settings-panel textarea {
+  resize: vertical;
+  min-height: 8rem;
 }
 
 .mobile-only {

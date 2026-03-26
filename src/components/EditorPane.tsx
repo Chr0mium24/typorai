@@ -3,10 +3,12 @@ import { createPortal } from 'react-dom';
 import { languages as codeMirrorLanguages } from '@codemirror/language-data';
 import { Crepe } from '@milkdown/crepe';
 import type {
+  AISettings,
   DocumentRecord,
   FolderRecord,
   WorkspaceSession,
 } from '../types/workspace';
+import { hasAIConfig, streamAIText } from '../lib/ai';
 import { getFolderPath } from '../lib/tree';
 import { restoreDisplayMathMarkdown } from '../lib/markdown-math';
 import { runPythonCode } from '../lib/pyodide-runtime';
@@ -25,6 +27,7 @@ type EditorPaneProps = {
   document: DocumentRecord | null;
   folders: FolderRecord[];
   browserSaveState: 'idle' | 'saving' | 'saved';
+  aiSettings: AISettings;
   lastBrowserSaveAt?: string;
   mode: WorkspaceSession['editorMode'];
   sidebarCollapsed: boolean;
@@ -86,6 +89,19 @@ type PythonOverlayItem = {
   outputHost: HTMLElement;
 };
 
+type AIInsertSession = {
+  blockStart: number;
+  contentStart: number;
+  contentEnd: number;
+  trailingPaddingLength: number;
+};
+
+type AIUndoEntry = {
+  documentId: string;
+  beforeMarkdown: string;
+  afterMarkdown: string;
+};
+
 const emptyPythonResult: PythonResult = {
   status: 'idle',
   output: '',
@@ -110,6 +126,77 @@ const clampRatio = (value: number) => {
   if (!Number.isFinite(value)) return 0;
   return Math.min(Math.max(value, 0), 1);
 };
+
+const normalizeGeneratedBlockSpacing = (markdown: string) =>
+  markdown.replace(/\n{4,}/g, '\n\n\n').replace(/^\n+/, '').replace(/\n+$/, '\n');
+
+const getLeadingGap = (before: string) => {
+  if (before.length === 0) return '';
+  if (before.endsWith('\n\n')) return '';
+  if (before.endsWith('\n')) return '\n';
+  return '\n\n';
+};
+
+const getTrailingGap = (after: string) => {
+  if (after.length === 0) return '';
+  if (after.startsWith('\n\n')) return '';
+  if (after.startsWith('\n')) return '\n';
+  return '\n\n';
+};
+
+const createAIInsertSession = (
+  markdown: string,
+  start: number,
+  end: number,
+): {
+  markdown: string;
+  session: AIInsertSession;
+} => {
+  const safeEnd = Math.min(Math.max(end, start), markdown.length);
+  const before = markdown.slice(0, safeEnd);
+  const after = markdown.slice(safeEnd);
+  const leadingGap = getLeadingGap(before);
+  const trailingGap = getTrailingGap(after);
+  const contentStart = before.length + leadingGap.length;
+
+  return {
+    markdown: `${before}${leadingGap}${trailingGap}${after}`,
+    session: {
+      blockStart: before.length,
+      contentStart,
+      contentEnd: contentStart,
+      trailingPaddingLength: trailingGap.length,
+    },
+  };
+};
+
+const updateAIInsertSession = (
+  markdown: string,
+  session: AIInsertSession,
+  nextContent: string,
+): {
+  markdown: string;
+  session: AIInsertSession;
+} => {
+  const contentEnd = session.contentStart + nextContent.length;
+
+  return {
+    markdown: `${markdown.slice(0, session.contentStart)}${nextContent}${markdown.slice(
+      session.contentEnd,
+    )}`,
+    session: {
+      ...session,
+      contentEnd,
+    },
+  };
+};
+
+const removeAIInsertSession = (markdown: string, session: AIInsertSession) =>
+  normalizeGeneratedBlockSpacing(
+    `${markdown.slice(0, session.blockStart)}${markdown.slice(
+      session.contentEnd + session.trailingPaddingLength,
+    )}`,
+  );
 
 const getLinePrefixLength = (line: string) => {
   let offset = 0;
@@ -153,6 +240,7 @@ const buildMarkdownTextMap = (markdown: string): MarkdownTextMap => {
   const visible = new Array<boolean>(markdown.length).fill(false);
   const fencePattern = /^ {0,3}(```+|~~~+)/;
   const hrPattern = /^ {0,3}((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/;
+  const commentPattern = /^ {0,3}<!--[\s\S]*?-->$/;
   let index = 0;
   let inFence = false;
 
@@ -179,7 +267,7 @@ const buildMarkdownTextMap = (markdown: string): MarkdownTextMap => {
       }
     } else if (fencePattern.test(line)) {
       inFence = true;
-    } else if (!hrPattern.test(line.trim())) {
+    } else if (!hrPattern.test(line.trim()) && !commentPattern.test(line.trim())) {
       const prefixLength = getLinePrefixLength(line);
       for (
         let position = lineStart + Math.min(prefixLength, line.length);
@@ -475,6 +563,81 @@ const formatPastTime = (timestamp?: string) => {
   return `${hours} 小时前`;
 };
 
+const getSelectionExcerpt = (markdown: string) =>
+  markdown.replace(/\s+/g, ' ').trim().slice(0, 120);
+
+const getVisualSelectionRect = (container: HTMLDivElement) => {
+  const editor = container.querySelector<HTMLElement>('.ProseMirror');
+  const selection = window.getSelection();
+  if (!editor || !selection || selection.rangeCount === 0) return null;
+
+  const range = selection.getRangeAt(0);
+  if (range.collapsed) return null;
+  if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) {
+    return null;
+  }
+
+  const rect = range.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return null;
+  return rect;
+};
+
+const getTextareaSelectionRect = (
+  textarea: HTMLTextAreaElement,
+  selectionStart: number,
+  selectionEnd: number,
+) => {
+  if (selectionStart === selectionEnd) return null;
+
+  const styles = window.getComputedStyle(textarea);
+  const mirror = window.document.createElement('div');
+  mirror.style.position = 'absolute';
+  mirror.style.visibility = 'hidden';
+  mirror.style.pointerEvents = 'none';
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.wordWrap = 'break-word';
+  mirror.style.overflow = 'hidden';
+  mirror.style.top = '0';
+  mirror.style.left = '0';
+  mirror.style.font = styles.font;
+  mirror.style.letterSpacing = styles.letterSpacing;
+  mirror.style.lineHeight = styles.lineHeight;
+  mirror.style.padding = styles.padding;
+  mirror.style.border = styles.border;
+  mirror.style.width = `${textarea.clientWidth}px`;
+
+  mirror.textContent = textarea.value.slice(0, selectionEnd);
+  const marker = window.document.createElement('span');
+  marker.textContent = '\u200b';
+  mirror.appendChild(marker);
+  window.document.body.appendChild(mirror);
+
+  const markerRect = marker.getBoundingClientRect();
+  const mirrorRect = mirror.getBoundingClientRect();
+  mirror.remove();
+
+  const textareaRect = textarea.getBoundingClientRect();
+  const lineHeight = Number.parseFloat(styles.lineHeight) || 20;
+
+  return new DOMRect(
+    textareaRect.left + markerRect.left - mirrorRect.left - textarea.scrollLeft,
+    textareaRect.top + markerRect.top - mirrorRect.top - textarea.scrollTop,
+    1,
+    lineHeight,
+  );
+};
+
+const getCodeNodeContent = (node: HTMLElement) => {
+  if (node.classList.contains('cm-content')) {
+    return Array.from(node.querySelectorAll<HTMLElement>('.cm-line'))
+      .map((line) => line.textContent ?? '')
+      .join('\n')
+      .replace(/\n$/, '');
+  }
+
+  return (node.textContent ?? '').replace(/\n$/, '');
+};
+
 const MilkdownSurface = ({ markdown, active, onChange }: MilkdownSurfaceProps) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const crepeRef = useRef<Crepe | null>(null);
@@ -608,7 +771,7 @@ const PythonDecorations = ({
         blocks.forEach((block) => {
           const matchIndex = codeNodes.findIndex((node, index) => {
             if (used.has(index)) return false;
-            const code = node.textContent?.replace(/\n$/, '') ?? '';
+            const code = getCodeNodeContent(node);
             return code === block.code;
           });
 
@@ -775,6 +938,7 @@ const EditorPane = ({
   document,
   folders,
   browserSaveState,
+  aiSettings,
   lastBrowserSaveAt,
   mode,
   sidebarCollapsed,
@@ -788,10 +952,20 @@ const EditorPane = ({
   onToggleMode,
   onToggleSidebar,
 }: EditorPaneProps) => {
+  const editorCardRef = useRef<HTMLDivElement | null>(null);
   const sourceEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const visualEditorRef = useRef<HTMLDivElement | null>(null);
   const previousDocumentIdRef = useRef<string | null>(document?.id ?? null);
   const markdownMapRef = useRef<MarkdownTextMap>(buildMarkdownTextMap(document?.markdown ?? ''));
+  const markdownRef = useRef(document?.markdown ?? '');
+  const aiControllersRef = useRef(new Map<string, AbortController>());
+  const aiFlushTimersRef = useRef(new Map<string, number>());
+  const aiGenerationInFlightRef = useRef(false);
+  const aiPendingUndoRef = useRef<{
+    documentId: string;
+    beforeMarkdown: string;
+  } | null>(null);
+  const aiUndoEntryRef = useRef<AIUndoEntry | null>(null);
   const sourceSelectionRef = useRef<CursorSnapshot>({
     sourceStart: 0,
     sourceEnd: 0,
@@ -805,11 +979,18 @@ const EditorPane = ({
     key: 0,
     type: 'idle',
   });
+  const [selectionState, setSelectionState] = useState({
+    hasSelection: false,
+    excerpt: '',
+    top: 0,
+    left: 0,
+  });
 
   const breadcrumb = useMemo(() => {
     if (!document) return [];
     return getFolderPath(document.parentFolderId, folders);
   }, [document, folders]);
+  const aiReady = hasAIConfig(aiSettings);
   const saveLabel =
     browserSaveState === 'saving'
       ? '保存中'
@@ -819,14 +1000,197 @@ const EditorPane = ({
           : '已保存'
         : '等待编辑';
 
+  const applyMarkdown = (nextMarkdown: string, source: 'user' | 'ai' = 'user') => {
+    const undoEntry = aiUndoEntryRef.current;
+    if (
+      source === 'user' &&
+      undoEntry &&
+      undoEntry.documentId === document?.id &&
+      nextMarkdown !== undoEntry.afterMarkdown
+    ) {
+      aiUndoEntryRef.current = null;
+    }
+    markdownRef.current = nextMarkdown;
+    onChangeMarkdown(nextMarkdown);
+  };
+
+  const syncSelectionState = (
+    snapshot: CursorSnapshot,
+    value: string,
+    rect?: DOMRect | null,
+  ) => {
+    sourceSelectionRef.current = snapshot;
+    const start = Math.min(snapshot.sourceStart, snapshot.sourceEnd);
+    const end = Math.max(snapshot.sourceStart, snapshot.sourceEnd);
+    const selectedMarkdown = value.slice(start, end);
+    const card = editorCardRef.current;
+    const cardRect = card?.getBoundingClientRect();
+    const hasSelection = start !== end && selectedMarkdown.trim().length > 0;
+    const top =
+      rect && card && cardRect
+        ? rect.top - cardRect.top + card.scrollTop - 40
+        : 0;
+    const left =
+      rect && card && cardRect
+        ? rect.left - cardRect.left + card.scrollLeft
+        : 0;
+
+    setSelectionState({
+      hasSelection,
+      excerpt: getSelectionExcerpt(selectedMarkdown),
+      top,
+      left,
+    });
+  };
+
+  const clearAIResources = (id: string) => {
+    const controller = aiControllersRef.current.get(id);
+    if (controller) {
+      controller.abort();
+      aiControllersRef.current.delete(id);
+    }
+
+    const timer = aiFlushTimersRef.current.get(id);
+    if (timer) {
+      window.clearTimeout(timer);
+      aiFlushTimersRef.current.delete(id);
+    }
+  };
+
+  const runAIStream = async (
+    session: AIInsertSession,
+    selectedMarkdown: string,
+    fullDocumentMarkdown?: string,
+  ) => {
+    if (!document) return;
+
+    const sessionId = `${document.id}:${session.contentStart}`;
+    clearAIResources(sessionId);
+
+    const controller = new AbortController();
+    aiControllersRef.current.set(sessionId, controller);
+
+    let nextContent = '';
+    let activeSession = session;
+
+    const flushContent = () => {
+      aiFlushTimersRef.current.delete(sessionId);
+      const { markdown: updatedMarkdown, session: updatedSession } = updateAIInsertSession(
+        markdownRef.current,
+        activeSession,
+        nextContent,
+      );
+      activeSession = updatedSession;
+
+      if (updatedMarkdown !== markdownRef.current) {
+        applyMarkdown(updatedMarkdown, 'ai');
+      }
+    };
+
+    const scheduleFlush = () => {
+      if (aiFlushTimersRef.current.has(sessionId)) return;
+      aiFlushTimersRef.current.set(
+        sessionId,
+        window.setTimeout(flushContent, 160),
+      );
+    };
+
+    try {
+      await streamAIText(
+        aiSettings,
+        {
+          documentTitle: document.title,
+          fullDocumentMarkdown: fullDocumentMarkdown ?? markdownRef.current,
+          selectedMarkdown,
+          userInstruction: '',
+        },
+        (delta) => {
+          nextContent += delta;
+          scheduleFlush();
+        },
+        controller.signal,
+      );
+
+      flushContent();
+      if (!nextContent.trim()) {
+        aiPendingUndoRef.current = null;
+        applyMarkdown(removeAIInsertSession(markdownRef.current, activeSession), 'ai');
+      } else if (aiPendingUndoRef.current?.documentId === document.id) {
+        aiUndoEntryRef.current = {
+          documentId: document.id,
+          beforeMarkdown: aiPendingUndoRef.current.beforeMarkdown,
+          afterMarkdown: markdownRef.current,
+        };
+        aiPendingUndoRef.current = null;
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        aiPendingUndoRef.current = null;
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : 'AI 生成失败';
+      aiPendingUndoRef.current = null;
+      applyMarkdown(removeAIInsertSession(markdownRef.current, activeSession), 'ai');
+      window.alert(`AI 生成失败：${message}`);
+    } finally {
+      clearAIResources(sessionId);
+    }
+  };
+
+  const handleAskAI = async () => {
+    if (!document) return;
+    if (aiGenerationInFlightRef.current) return;
+    if (!aiReady) {
+      window.alert('请先在设置中填写 AI provider、model 和 API key。');
+      return;
+    }
+
+    const snapshot = sourceSelectionRef.current;
+    const start = Math.min(snapshot.sourceStart, snapshot.sourceEnd);
+    const end = Math.max(snapshot.sourceStart, snapshot.sourceEnd);
+    const currentMarkdown = markdownRef.current;
+    const selectedMarkdown = currentMarkdown.slice(start, end);
+
+    if (!selectedMarkdown.trim()) return;
+
+    const insertion = createAIInsertSession(markdownRef.current, start, end);
+    aiPendingUndoRef.current = {
+      documentId: document.id,
+      beforeMarkdown: currentMarkdown,
+    };
+    aiUndoEntryRef.current = null;
+
+    setSelectionState({
+      hasSelection: false,
+      excerpt: '',
+      top: 0,
+      left: 0,
+    });
+    applyMarkdown(insertion.markdown, 'ai');
+    aiGenerationInFlightRef.current = true;
+    try {
+      await runAIStream(insertion.session, selectedMarkdown, currentMarkdown);
+    } finally {
+      aiGenerationInFlightRef.current = false;
+    }
+  };
+
   useEffect(() => {
     markdownMapRef.current = buildMarkdownTextMap(document?.markdown ?? '');
-    sourceSelectionRef.current = {
-      sourceStart: 0,
-      sourceEnd: 0,
-      textStart: 0,
-      textEnd: 0,
-    };
+    markdownRef.current = document?.markdown ?? '';
+    aiPendingUndoRef.current = null;
+    aiUndoEntryRef.current = null;
+    syncSelectionState(
+      {
+        sourceStart: 0,
+        sourceEnd: 0,
+        textStart: 0,
+        textEnd: 0,
+      },
+      document?.markdown ?? '',
+      null,
+    );
   }, [document?.id]);
 
   useEffect(() => {
@@ -847,7 +1211,31 @@ const EditorPane = ({
 
   useEffect(() => {
     markdownMapRef.current = buildMarkdownTextMap(document?.markdown ?? '');
+    markdownRef.current = document?.markdown ?? '';
   }, [document?.markdown]);
+
+  useEffect(() => {
+    aiControllersRef.current.forEach((controller) => controller.abort());
+    aiControllersRef.current.clear();
+    aiFlushTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    aiFlushTimersRef.current.clear();
+    aiGenerationInFlightRef.current = false;
+    aiPendingUndoRef.current = null;
+    aiUndoEntryRef.current = null;
+  }, [document?.id]);
+
+  useEffect(
+    () => () => {
+      aiControllersRef.current.forEach((controller) => controller.abort());
+      aiControllersRef.current.clear();
+      aiFlushTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      aiFlushTimersRef.current.clear();
+      aiGenerationInFlightRef.current = false;
+      aiPendingUndoRef.current = null;
+      aiUndoEntryRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!document) return;
@@ -889,12 +1277,16 @@ const EditorPane = ({
       const textStart = Math.min(Math.max(snapshot.textStart, 0), map.textLength);
       const textEnd = Math.min(Math.max(snapshot.textEnd, 0), map.textLength);
 
-      sourceSelectionRef.current = {
-        sourceStart: map.textToSource[textStart] ?? markdownLength,
-        sourceEnd: map.textToSource[textEnd] ?? markdownLength,
-        textStart,
-        textEnd,
-      };
+      syncSelectionState(
+        {
+          sourceStart: map.textToSource[textStart] ?? markdownLength,
+          sourceEnd: map.textToSource[textEnd] ?? markdownLength,
+          textStart,
+          textEnd,
+        },
+        markdownRef.current,
+        getVisualSelectionRect(visualEditorRef.current),
+      );
     };
 
     window.document.addEventListener('selectionchange', updateFromVisual);
@@ -907,6 +1299,52 @@ const EditorPane = ({
       root.removeEventListener('mouseup', updateFromVisual);
     };
   }, [document?.id, mode]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+
+      if (key === 'z' && !event.shiftKey) {
+        const undoEntry = aiUndoEntryRef.current;
+        if (!document || !undoEntry || undoEntry.documentId !== document.id) return;
+
+        event.preventDefault();
+        aiControllersRef.current.forEach((controller) => controller.abort());
+        aiControllersRef.current.clear();
+        aiFlushTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+        aiFlushTimersRef.current.clear();
+        aiGenerationInFlightRef.current = false;
+        aiPendingUndoRef.current = null;
+        aiUndoEntryRef.current = null;
+        applyMarkdown(undoEntry.beforeMarkdown, 'ai');
+        return;
+      }
+
+      if (key !== 'enter') return;
+      if (!selectionState.hasSelection) return;
+
+      event.preventDefault();
+      void handleAskAI();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectionState.hasSelection, document?.id, aiSettings, mode]);
+
+  const captureSourceSelection = (
+    selectionStart: number,
+    selectionEnd: number,
+    value: string,
+  ) => {
+    syncSelectionState(
+      getSourceCursorSnapshot(selectionStart, selectionEnd, value),
+      value,
+      sourceEditorRef.current
+        ? getTextareaSelectionRect(sourceEditorRef.current, selectionStart, selectionEnd)
+        : null,
+    );
+  };
 
   if (!document) {
     return (
@@ -996,7 +1434,7 @@ const EditorPane = ({
             <button
               className="icon-button"
               onClick={onOpenSettings}
-              title="GitHub 设置"
+              title="工作区设置"
               type="button"
             >
               <SettingsIcon width={16} height={16} />
@@ -1004,7 +1442,10 @@ const EditorPane = ({
           </div>
         </div>
 
-        <div className="editor-card">
+        <div
+          className={`editor-card ${mode === 'source' ? 'is-source-mode' : ''}`}
+          ref={editorCardRef}
+        >
           <div className={`editor-stack ${mode === 'source' ? 'is-source' : 'is-wysiwyg'}`}>
             <div
               className={`editor-mode-pane visual-pane ${
@@ -1016,7 +1457,7 @@ const EditorPane = ({
                 active={mode === 'wysiwyg'}
                 key={document.id}
                 markdown={document.markdown}
-                onChange={onChangeMarkdown}
+                onChange={(nextMarkdown) => applyMarkdown(nextMarkdown, 'user')}
               />
               <PythonDecorations
                 markdown={document.markdown}
@@ -1032,29 +1473,29 @@ const EditorPane = ({
               <textarea
                 className="source-editor"
                 onChange={(event) => {
-                  sourceSelectionRef.current = getSourceCursorSnapshot(
+                  captureSourceSelection(
                     event.currentTarget.selectionStart,
                     event.currentTarget.selectionEnd,
                     event.currentTarget.value,
                   );
-                  onChangeMarkdown(event.target.value);
+                  applyMarkdown(event.target.value, 'user');
                 }}
                 onClick={(event) => {
-                  sourceSelectionRef.current = getSourceCursorSnapshot(
+                  captureSourceSelection(
                     event.currentTarget.selectionStart,
                     event.currentTarget.selectionEnd,
                     event.currentTarget.value,
                   );
                 }}
                 onKeyUp={(event) => {
-                  sourceSelectionRef.current = getSourceCursorSnapshot(
+                  captureSourceSelection(
                     event.currentTarget.selectionStart,
                     event.currentTarget.selectionEnd,
                     event.currentTarget.value,
                   );
                 }}
                 onSelect={(event) => {
-                  sourceSelectionRef.current = getSourceCursorSnapshot(
+                  captureSourceSelection(
                     event.currentTarget.selectionStart,
                     event.currentTarget.selectionEnd,
                     event.currentTarget.value,
@@ -1067,6 +1508,27 @@ const EditorPane = ({
               />
             </div>
           </div>
+
+          {selectionState.hasSelection ? (
+            <button
+              className="ai-selection-trigger"
+              disabled={!aiReady}
+              onClick={() => void handleAskAI()}
+              style={{
+                top: `${Math.max(selectionState.top, 8)}px`,
+                left: `${Math.max(selectionState.left, 8)}px`,
+              }}
+              title={
+                aiReady
+                  ? '基于当前选区生成，快捷键 Cmd/Ctrl+Enter'
+                  : '先去设置里填写 AI provider / model / key'
+              }
+              type="button"
+            >
+              <span>问 AI</span>
+              <kbd>⌘↵</kbd>
+            </button>
+          ) : null}
         </div>
       </div>
     </section>

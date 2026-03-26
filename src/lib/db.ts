@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type {
+  AISettings,
   AppSettingRecord,
   DocumentRecord,
   FolderRecord,
@@ -7,6 +8,7 @@ import type {
   WorkspaceSession,
 } from '../types/workspace';
 import {
+  defaultAISettings,
   defaultGithubSettings,
   defaultWorkspaceSession,
 } from '../types/workspace';
@@ -34,14 +36,16 @@ export type WorkspaceSnapshot = {
   folders: FolderRecord[];
   session: WorkspaceSession;
   githubSettings: GithubSettings;
+  aiSettings: AISettings;
 };
 
 export const loadWorkspaceSnapshot = async (): Promise<WorkspaceSnapshot> => {
-  const [documents, folders, sessionSetting, githubSetting] = await Promise.all([
+  const [documents, folders, sessionSetting, githubSetting, aiSetting] = await Promise.all([
     workspaceDB.documents.toArray(),
     workspaceDB.folders.toArray(),
     workspaceDB.settings.get('session'),
     workspaceDB.settings.get('github'),
+    workspaceDB.settings.get('ai'),
   ]);
 
   if (documents.length === 0 && folders.length === 0) {
@@ -54,6 +58,10 @@ export const loadWorkspaceSnapshot = async (): Promise<WorkspaceSnapshot> => {
         id: 'github',
         value: defaultGithubSettings,
       }),
+      workspaceDB.settings.put({
+        id: 'ai',
+        value: defaultAISettings,
+      }),
     ]);
 
     return {
@@ -61,6 +69,7 @@ export const loadWorkspaceSnapshot = async (): Promise<WorkspaceSnapshot> => {
       folders: defaults.folders,
       session: defaults.session,
       githubSettings: defaultGithubSettings,
+      aiSettings: defaultAISettings,
     };
   }
 
@@ -75,6 +84,21 @@ export const loadWorkspaceSnapshot = async (): Promise<WorkspaceSnapshot> => {
       githubSetting?.id === 'github'
         ? { ...defaultGithubSettings, ...githubSetting.value }
         : defaultGithubSettings,
+    aiSettings:
+      aiSetting?.id === 'ai'
+        ? {
+            ...defaultAISettings,
+            ...aiSetting.value,
+            openAICompatible: {
+              ...defaultAISettings.openAICompatible,
+              ...aiSetting.value.openAICompatible,
+            },
+            gemini: {
+              ...defaultAISettings.gemini,
+              ...aiSetting.value.gemini,
+            },
+          }
+        : defaultAISettings,
   };
 };
 
@@ -103,4 +127,8 @@ export const persistSession = async (session: WorkspaceSession) => {
 
 export const persistGithubSettings = async (settings: GithubSettings) => {
   await workspaceDB.settings.put({ id: 'github', value: settings });
+};
+
+export const persistAISettings = async (settings: AISettings) => {
+  await workspaceDB.settings.put({ id: 'ai', value: settings });
 };

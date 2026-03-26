@@ -41,6 +41,7 @@ function App() {
     folders,
     session,
     githubSettings,
+    aiSettings,
     syncState,
     browserSaveState,
     lastBrowserSaveAt,
@@ -60,6 +61,7 @@ function App() {
     toggleFolderExpanded,
     toggleSidebar,
     updateGithubSettings,
+    updateAISettings,
     syncNow,
     flushLocalPersistence,
   } = useWorkspaceStore();
@@ -99,6 +101,12 @@ function App() {
         return;
       }
 
+      if (event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void flushLocalPersistence();
+        return;
+      }
+
       if (event.key.toLowerCase() === 'w') {
         if (!session.activeDocumentId) return;
         event.preventDefault();
@@ -110,6 +118,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     closeDocument,
+    flushLocalPersistence,
     session.activeDocumentId,
     session.editorMode,
     setEditorMode,
@@ -305,6 +314,7 @@ function App() {
               document={activeDocument}
               folders={folders}
               browserSaveState={browserSaveState}
+              aiSettings={aiSettings}
               lastBrowserSaveAt={lastBrowserSaveAt}
               mode={session.editorMode}
               sidebarCollapsed={session.sidebarCollapsed}
@@ -344,9 +354,11 @@ function App() {
 
         <SettingsPanel
           open={settingsOpen}
-          settings={githubSettings}
+          githubSettings={githubSettings}
+          aiSettings={aiSettings}
           onClose={() => setSettingsOpen(false)}
-          onSave={updateGithubSettings}
+          onSaveGithub={updateGithubSettings}
+          onSaveAI={updateAISettings}
         />
       </div>
 

@@ -41,9 +41,32 @@ export type GithubSettings = {
   authorEmail: string;
 };
 
+export type AIProviderKind = 'openai-compatible' | 'gemini';
+
+export type OpenAICompatibleSettings = {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+};
+
+export type GeminiSettings = {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+};
+
+export type AISettings = {
+  provider: AIProviderKind;
+  temperature: number;
+  systemPrompt: string;
+  openAICompatible: OpenAICompatibleSettings;
+  gemini: GeminiSettings;
+};
+
 export type AppSettingRecord =
   | { id: 'session'; value: WorkspaceSession }
-  | { id: 'github'; value: GithubSettings };
+  | { id: 'github'; value: GithubSettings }
+  | { id: 'ai'; value: AISettings };
 
 export type SyncState = {
   status: 'idle' | 'queued' | 'syncing' | 'error' | 'setup-required';
@@ -67,6 +90,23 @@ export const defaultGithubSettings: GithubSettings = {
   token: '',
   authorName: '',
   authorEmail: '',
+};
+
+export const defaultAISettings: AISettings = {
+  provider: 'openai-compatible',
+  temperature: 0.8,
+  systemPrompt:
+    '你是一个协作写作者。你只基于当前文档上下文继续创作，不解释你的过程，不输出额外前言。',
+  openAICompatible: {
+    baseUrl: 'https://api.openai.com',
+    apiKey: '',
+    model: '',
+  },
+  gemini: {
+    baseUrl: 'https://generativelanguage.googleapis.com',
+    apiKey: '',
+    model: 'gemini-2.5-flash',
+  },
 };
 
 export const defaultWorkspaceSession: WorkspaceSession = {

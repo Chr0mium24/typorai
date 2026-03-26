@@ -3,6 +3,7 @@ import {
   deleteDocuments,
   deleteFolders,
   loadWorkspaceSnapshot,
+  persistAISettings,
   persistDocument,
   persistFolders,
   persistGithubSettings,
@@ -18,6 +19,7 @@ import {
   syncDocumentToGithub,
 } from '../lib/github';
 import type {
+  AISettings,
   DocumentRecord,
   FolderRecord,
   GithubSettings,
@@ -25,6 +27,7 @@ import type {
   WorkspaceSession,
 } from '../types/workspace';
 import {
+  defaultAISettings,
   defaultGithubSettings,
   defaultWorkspaceSession,
   ROOT_FOLDER_ID,
@@ -238,6 +241,7 @@ export type WorkspaceStore = {
   folders: FolderRecord[];
   session: WorkspaceSession;
   githubSettings: GithubSettings;
+  aiSettings: AISettings;
   syncState: SyncState;
   browserSaveState: BrowserSaveState;
   lastBrowserSaveAt?: string;
@@ -261,6 +265,7 @@ export type WorkspaceStore = {
   toggleFolderExpanded: (folderId: string) => void;
   toggleSidebar: () => void;
   updateGithubSettings: (settings: GithubSettings) => Promise<void>;
+  updateAISettings: (settings: AISettings) => Promise<void>;
   syncDirtyDocuments: () => Promise<void>;
   syncNow: () => Promise<void>;
   flushLocalPersistence: () => Promise<void>;
@@ -272,6 +277,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   folders: [],
   session: defaultWorkspaceSession,
   githubSettings: defaultGithubSettings,
+  aiSettings: defaultAISettings,
   syncState: { status: 'idle', lastError: null },
   browserSaveState: 'idle',
   lastBrowserSaveAt: undefined,
@@ -296,6 +302,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       folders: snapshot.folders,
       session: nextSession,
       githubSettings: snapshot.githubSettings,
+      aiSettings: snapshot.aiSettings,
       syncState: {
         status: isGithubConfigured(snapshot.githubSettings)
           ? snapshot.documents.some((document) => document.remoteDirty)
@@ -654,6 +661,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({ githubSettings: settings });
     await persistGithubSettings(settings);
     scheduleRemoteSync(get, set);
+  },
+
+  updateAISettings: async (settings) => {
+    set({ aiSettings: settings });
+    await persistAISettings(settings);
   },
 
   syncDirtyDocuments: async () => {

@@ -1,30 +1,21 @@
 import { useEffect, useState } from 'react';
-import type { AISettings, GithubSettings } from '../types/workspace';
+import type { AISettings } from '../types/workspace';
 
 type SettingsPanelProps = {
   open: boolean;
-  githubSettings: GithubSettings;
   aiSettings: AISettings;
   onClose: () => void;
-  onSaveGithub: (settings: GithubSettings) => Promise<void>;
   onSaveAI: (settings: AISettings) => Promise<void>;
 };
 
 export const SettingsPanel = ({
   open,
-  githubSettings,
   aiSettings,
   onClose,
-  onSaveGithub,
   onSaveAI,
 }: SettingsPanelProps) => {
-  const [githubDraft, setGithubDraft] = useState(githubSettings);
   const [aiDraft, setAiDraft] = useState(aiSettings);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setGithubDraft(githubSettings);
-  }, [githubSettings]);
 
   useEffect(() => {
     setAiDraft(aiSettings);
@@ -41,7 +32,7 @@ export const SettingsPanel = ({
         <div className="settings-header">
           <div>
             <p className="eyebrow">Workspace Settings</p>
-            <h2>同步与 AI 设置</h2>
+            <h2>AI 设置</h2>
           </div>
           <button className="ghost-button" onClick={onClose} type="button">
             关闭
@@ -218,104 +209,6 @@ export const SettingsPanel = ({
           </label>
         </section>
 
-        <section className="settings-section">
-          <div className="settings-section-heading">
-            <p className="eyebrow">GitHub Sync</p>
-            <h3>远端仓库设置</h3>
-          </div>
-
-          <p className="settings-note">
-            这里只保存在当前浏览器，用于空闲时把 markdown 自动同步到 GitHub。
-          </p>
-
-          <label className="field">
-            <span>Owner</span>
-            <input
-              value={githubDraft.owner}
-              onChange={(event) =>
-                setGithubDraft((current) => ({ ...current, owner: event.target.value }))
-              }
-              placeholder="your-name"
-            />
-          </label>
-
-          <label className="field">
-            <span>Repo</span>
-            <input
-              value={githubDraft.repo}
-              onChange={(event) =>
-                setGithubDraft((current) => ({ ...current, repo: event.target.value }))
-              }
-              placeholder="typorai-content"
-            />
-          </label>
-
-          <label className="field">
-            <span>Branch</span>
-            <input
-              value={githubDraft.branch}
-              onChange={(event) =>
-                setGithubDraft((current) => ({ ...current, branch: event.target.value }))
-              }
-              placeholder="main"
-            />
-          </label>
-
-          <label className="field">
-            <span>Content Root</span>
-            <input
-              value={githubDraft.contentRoot}
-              onChange={(event) =>
-                setGithubDraft((current) => ({
-                  ...current,
-                  contentRoot: event.target.value,
-                }))
-              }
-              placeholder="content"
-            />
-          </label>
-
-          <label className="field">
-            <span>Token</span>
-            <input
-              type="password"
-              value={githubDraft.token}
-              onChange={(event) =>
-                setGithubDraft((current) => ({ ...current, token: event.target.value }))
-              }
-              placeholder="github_pat_..."
-            />
-          </label>
-
-          <label className="field">
-            <span>Author Name</span>
-            <input
-              value={githubDraft.authorName}
-              onChange={(event) =>
-                setGithubDraft((current) => ({
-                  ...current,
-                  authorName: event.target.value,
-                }))
-              }
-              placeholder="Your Name"
-            />
-          </label>
-
-          <label className="field">
-            <span>Author Email</span>
-            <input
-              value={githubDraft.authorEmail}
-              onChange={(event) =>
-                setGithubDraft((current) => ({
-                  ...current,
-                  authorEmail: event.target.value,
-                }))
-              }
-              placeholder="you@example.com"
-            />
-          </label>
-        </section>
-
         <div className="settings-actions">
           <button className="ghost-button" onClick={onClose} type="button">
             取消
@@ -325,7 +218,7 @@ export const SettingsPanel = ({
             disabled={saving}
             onClick={async () => {
               setSaving(true);
-              await Promise.all([onSaveGithub(githubDraft), onSaveAI(aiDraft)]);
+              await onSaveAI(aiDraft);
               setSaving(false);
               onClose();
             }}

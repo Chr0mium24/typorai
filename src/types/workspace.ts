@@ -1,45 +1,20 @@
-export type FolderRecord = {
-  id: string;
-  name: string;
-  parentId: string | null;
-  expanded: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
+import type {
+  DocumentRecord,
+  FolderRecord,
+  WorkspaceSession,
+  WorkspaceSnapshot,
+} from '../../shared/workspace';
 
-export type DocumentRecord = {
-  id: string;
-  title: string;
-  slug: string;
-  parentFolderId: string | null;
-  markdown: string;
-  createdAt: string;
-  updatedAt: string;
-  lastLocalSaveAt?: string;
-  lastRemoteSyncAt?: string;
-  remoteSha?: string;
-  remoteDirty: boolean;
-  pendingSyncSince?: string;
-  syncError?: string | null;
-};
-
-export type WorkspaceSession = {
-  openDocumentIds: string[];
-  activeDocumentId: string | null;
-  selectedFolderId: string | null;
-  sidebarCollapsed: boolean;
-  editorMode: 'wysiwyg' | 'source';
-};
-
-export type GithubSettings = {
-  owner: string;
-  repo: string;
-  branch: string;
-  contentRoot: string;
-  token: string;
-  authorName: string;
-  authorEmail: string;
-};
+export type {
+  DocumentRecord,
+  FolderRecord,
+  WorkspaceSession,
+  WorkspaceSnapshot,
+} from '../../shared/workspace';
+export {
+  ROOT_FOLDER_ID,
+  defaultWorkspaceSession,
+} from '../../shared/workspace';
 
 export type AIProviderKind = 'openai-compatible' | 'gemini';
 
@@ -63,33 +38,15 @@ export type AISettings = {
   gemini: GeminiSettings;
 };
 
-export type AppSettingRecord =
-  | { id: 'session'; value: WorkspaceSession }
-  | { id: 'github'; value: GithubSettings }
-  | { id: 'ai'; value: AISettings };
-
-export type SyncState = {
-  status: 'idle' | 'queued' | 'syncing' | 'error' | 'setup-required';
-  nextSyncAt?: string;
-  lastSyncAt?: string;
+export type PersistenceState = {
+  status: 'idle' | 'saving' | 'saved' | 'error';
+  lastSavedAt?: string;
   lastError?: string | null;
 };
 
 export type TreeFolder = FolderRecord & {
   childFolders: TreeFolder[];
   documents: DocumentRecord[];
-};
-
-export const ROOT_FOLDER_ID = '__workspace_root__';
-
-export const defaultGithubSettings: GithubSettings = {
-  owner: '',
-  repo: '',
-  branch: 'main',
-  contentRoot: 'content',
-  token: '',
-  authorName: '',
-  authorEmail: '',
 };
 
 export const defaultAISettings: AISettings = {
@@ -107,12 +64,4 @@ export const defaultAISettings: AISettings = {
     apiKey: '',
     model: 'gemini-2.5-flash',
   },
-};
-
-export const defaultWorkspaceSession: WorkspaceSession = {
-  openDocumentIds: [],
-  activeDocumentId: null,
-  selectedFolderId: null,
-  sidebarCollapsed: false,
-  editorMode: 'wysiwyg',
 };

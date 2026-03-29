@@ -40,9 +40,8 @@ function App() {
     documents,
     folders,
     session,
-    githubSettings,
     aiSettings,
-    syncState,
+    persistenceState,
     browserSaveState,
     lastBrowserSaveAt,
     initialize,
@@ -60,10 +59,8 @@ function App() {
     updateDocumentMarkdown,
     toggleFolderExpanded,
     toggleSidebar,
-    updateGithubSettings,
     updateAISettings,
-    syncNow,
-    flushLocalPersistence,
+    saveNow,
   } = useWorkspaceStore();
 
   useEffect(() => {
@@ -72,12 +69,12 @@ function App() {
 
   useEffect(() => {
     const flush = () => {
-      void flushLocalPersistence();
+      void saveNow();
     };
 
     window.addEventListener('pagehide', flush);
     return () => window.removeEventListener('pagehide', flush);
-  }, [flushLocalPersistence]);
+  }, [saveNow]);
 
   useEffect(
     () => () => {
@@ -103,7 +100,7 @@ function App() {
 
       if (event.key.toLowerCase() === 's') {
         event.preventDefault();
-        void flushLocalPersistence();
+        void saveNow();
         return;
       }
 
@@ -118,7 +115,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     closeDocument,
-    flushLocalPersistence,
+    saveNow,
     session.activeDocumentId,
     session.editorMode,
     setEditorMode,
@@ -197,7 +194,7 @@ function App() {
     [documents, session.openDocumentIds],
   );
 
-  const dirtyDocumentCount = documents.filter((document) => document.remoteDirty).length;
+  const dirtyDocumentCount = documents.filter((document) => document.dirty).length;
 
   const animateFreshItem = (type: 'document' | 'folder', id: string) => {
     const timerKey = type === 'document' ? 'document' : 'folder';
@@ -330,7 +327,7 @@ function App() {
               onExportDocument={exportActiveDocument}
               exportDisabled={!activeDocument}
               onOpenSettings={() => setSettingsOpen(true)}
-              onSyncNow={() => void syncNow()}
+              onSaveNow={() => void saveNow()}
               onToggleMode={() =>
                 setEditorMode(
                   session.editorMode === 'source' ? 'wysiwyg' : 'source',
@@ -348,16 +345,14 @@ function App() {
 
           <StatusBar
             dirtyDocumentCount={dirtyDocumentCount}
-            syncState={syncState}
+            persistenceState={persistenceState}
           />
         </main>
 
         <SettingsPanel
           open={settingsOpen}
-          githubSettings={githubSettings}
           aiSettings={aiSettings}
           onClose={() => setSettingsOpen(false)}
-          onSaveGithub={updateGithubSettings}
           onSaveAI={updateAISettings}
         />
       </div>

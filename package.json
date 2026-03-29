@@ -6,9 +6,11 @@
   "type": "module",
   "scripts": {
     "start": "bash scripts/start.sh",
+    "dev:client": "vite",
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build",
+    "preview": "vite preview",
+    "serve": "node .server-dist/server/index.js"
   },
   "dependencies": {
     "@codemirror/language-data": "^6.5.2",

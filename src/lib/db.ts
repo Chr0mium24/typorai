@@ -1,134 +1,115 @@
-import Dexie, { type Table } from 'dexie';
-import type {
-  AISettings,
-  AppSettingRecord,
-  DocumentRecord,
-  FolderRecord,
-  GithubSettings,
-  WorkspaceSession,
-} from '../types/workspace';
-import {
-  defaultAISettings,
-  defaultGithubSettings,
-  defaultWorkspaceSession,
-} from '../types/workspace';
-import { buildDefaultWorkspace } from './default-workspace';
+import { buildDefaultWorkspace, type WorkspaceSnapshot } from '../../shared/workspace';
+import type { AISettings } from '../types/workspace';
+import { defaultAISettings } from '../types/workspace';
 
-class WorkspaceDB extends Dexie {
-  documents!: Table<DocumentRecord, string>;
-  folders!: Table<FolderRecord, string>;
-  settings!: Table<AppSettingRecord, string>;
+const AI_SETTINGS_STORAGE_KEY = 'typorai-ai-settings';
 
-  constructor() {
-    super('typorai-workspace');
-    this.version(1).stores({
-      documents: 'id,parentFolderId,updatedAt,remoteDirty',
-      folders: 'id,parentId,updatedAt',
-      settings: 'id',
-    });
-  }
-}
-
-export const workspaceDB = new WorkspaceDB();
-
-export type WorkspaceSnapshot = {
-  documents: DocumentRecord[];
-  folders: FolderRecord[];
-  session: WorkspaceSession;
-  githubSettings: GithubSettings;
+export type LoadedWorkspaceSnapshot = WorkspaceSnapshot & {
   aiSettings: AISettings;
+  workspaceError?: string | null;
 };
 
-export const loadWorkspaceSnapshot = async (): Promise<WorkspaceSnapshot> => {
-  const [documents, folders, sessionSetting, githubSetting, aiSetting] = await Promise.all([
-    workspaceDB.documents.toArray(),
-    workspaceDB.folders.toArray(),
-    workspaceDB.settings.get('session'),
-    workspaceDB.settings.get('github'),
-    workspaceDB.settings.get('ai'),
-  ]);
+const mergeAISettings = (value: Partial<AISettings> | null | undefined): AISettings => ({
+  ...defaultAISettings,
+  ...value,
+  openAICompatible: {
+    ...defaultAISettings.openAICompatible,
+    ...value?.openAICompatible,
+  },
+  gemini: {
+    ...defaultAISettings.gemini,
+    ...value?.gemini,
+  },
+});
 
-  if (documents.length === 0 && folders.length === 0) {
-    const defaults = buildDefaultWorkspace();
-    await Promise.all([
-      workspaceDB.documents.bulkPut(defaults.documents),
-      workspaceDB.folders.bulkPut(defaults.folders),
-      workspaceDB.settings.put({ id: 'session', value: defaults.session }),
-      workspaceDB.settings.put({
-        id: 'github',
-        value: defaultGithubSettings,
-      }),
-      workspaceDB.settings.put({
-        id: 'ai',
-        value: defaultAISettings,
-      }),
-    ]);
+const loadAISettings = (): AISettings => {
+  if (typeof window === 'undefined') return defaultAISettings;
+
+  try {
+    const raw = window.localStorage.getItem(AI_SETTINGS_STORAGE_KEY);
+    if (!raw) return defaultAISettings;
+    return mergeAISettings(JSON.parse(raw) as Partial<AISettings>);
+  } catch {
+    return defaultAISettings;
+  }
+};
+
+export const loadWorkspaceSnapshot = async (): Promise<LoadedWorkspaceSnapshot> => {
+  const aiSettings = loadAISettings();
+
+  try {
+    const response = await fetch('/api/workspace', {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend load failed: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { data?: WorkspaceSnapshot };
+    if (!payload.data) {
+      throw new Error('Backend returned an empty workspace payload.');
+    }
 
     return {
-      documents: defaults.documents,
-      folders: defaults.folders,
-      session: defaults.session,
-      githubSettings: defaultGithubSettings,
-      aiSettings: defaultAISettings,
+      ...payload.data,
+      aiSettings,
+      workspaceError: null,
+    };
+  } catch (error) {
+    return {
+      ...buildDefaultWorkspace(),
+      aiSettings,
+      workspaceError:
+        error instanceof Error ? error.message : '后端不可用，已回退到默认工作区。',
     };
   }
+};
+
+export const persistWorkspaceSnapshot = async (snapshot: WorkspaceSnapshot) => {
+  const response = await fetch('/api/workspace', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(snapshot),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let detail = text.trim();
+
+    try {
+      const payload = JSON.parse(text) as {
+        error?: {
+          message?: string;
+        };
+      };
+      detail = payload.error?.message?.trim() || detail;
+    } catch {
+      // keep raw text when the backend does not return JSON
+    }
+
+    throw new Error(
+      detail
+        ? `Backend save failed: ${response.status} ${detail}`
+        : `Backend save failed: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as {
+    data?: { savedAt?: string };
+  };
 
   return {
-    documents,
-    folders,
-    session:
-      sessionSetting?.id === 'session'
-        ? { ...defaultWorkspaceSession, ...sessionSetting.value }
-        : defaultWorkspaceSession,
-    githubSettings:
-      githubSetting?.id === 'github'
-        ? { ...defaultGithubSettings, ...githubSetting.value }
-        : defaultGithubSettings,
-    aiSettings:
-      aiSetting?.id === 'ai'
-        ? {
-            ...defaultAISettings,
-            ...aiSetting.value,
-            openAICompatible: {
-              ...defaultAISettings.openAICompatible,
-              ...aiSetting.value.openAICompatible,
-            },
-            gemini: {
-              ...defaultAISettings.gemini,
-              ...aiSetting.value.gemini,
-            },
-          }
-        : defaultAISettings,
+    savedAt: payload.data?.savedAt ?? new Date().toISOString(),
   };
 };
 
-export const persistDocument = async (document: DocumentRecord) => {
-  await workspaceDB.documents.put(document);
-};
-
-export const persistFolders = async (folders: FolderRecord[]) => {
-  if (folders.length === 0) return;
-  await workspaceDB.folders.bulkPut(folders);
-};
-
-export const deleteDocuments = async (documentIds: string[]) => {
-  if (documentIds.length === 0) return;
-  await workspaceDB.documents.bulkDelete(documentIds);
-};
-
-export const deleteFolders = async (folderIds: string[]) => {
-  if (folderIds.length === 0) return;
-  await workspaceDB.folders.bulkDelete(folderIds);
-};
-
-export const persistSession = async (session: WorkspaceSession) => {
-  await workspaceDB.settings.put({ id: 'session', value: session });
-};
-
-export const persistGithubSettings = async (settings: GithubSettings) => {
-  await workspaceDB.settings.put({ id: 'github', value: settings });
-};
-
 export const persistAISettings = async (settings: AISettings) => {
-  await workspaceDB.settings.put({ id: 'ai', value: settings });
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 };

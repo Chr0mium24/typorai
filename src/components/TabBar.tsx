@@ -36,7 +36,7 @@ export const TabBar = ({
             type="button"
           >
             <span className="tab-title">{document.title}</span>
-            {document.remoteDirty ? <span className="tab-dot" /> : null}
+            {document.dirty ? <span className="tab-dot" /> : null}
             <span
               className="tab-close"
               onClick={(event) => {

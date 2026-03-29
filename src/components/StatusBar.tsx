@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { SyncState } from '../types/workspace';
+import type { PersistenceState } from '../types/workspace';
 
 type StatusBarProps = {
   dirtyDocumentCount: number;
-  syncState: SyncState;
+  persistenceState: PersistenceState;
 };
 
 const formatPastTime = (timestamp?: string) => {
@@ -17,39 +17,24 @@ const formatPastTime = (timestamp?: string) => {
   return `${hours} 小时前`;
 };
 
-const formatFutureTime = (timestamp?: string) => {
-  if (!timestamp) return '即将';
-  const distanceMs = new Date(timestamp).getTime() - Date.now();
-  const minutes = Math.max(Math.ceil(distanceMs / 60000), 0);
-
-  if (minutes <= 1) return '1 分钟内';
-  if (minutes < 60) return `${minutes} 分钟内`;
-  const hours = Math.ceil(minutes / 60);
-  return `${hours} 小时内`;
-};
-
-const getSyncLabel = (syncState: SyncState) => {
-  switch (syncState.status) {
-    case 'queued':
-      return syncState.nextSyncAt
-        ? `GitHub 同步排队中 · ${formatFutureTime(syncState.nextSyncAt)}`
-        : 'GitHub 同步已排队';
-    case 'syncing':
-      return 'GitHub 正在同步';
+const getPersistenceLabel = (persistenceState: PersistenceState) => {
+  switch (persistenceState.status) {
+    case 'saving':
+      return '后端保存中';
     case 'error':
-      return syncState.lastError ?? 'GitHub 同步失败';
-    case 'setup-required':
-      return 'GitHub 未配置';
+      return persistenceState.lastError ?? '后端保存失败';
+    case 'saved':
+      return persistenceState.lastSavedAt
+        ? `后端已保存 · ${formatPastTime(persistenceState.lastSavedAt)}`
+        : '后端已保存';
     default:
-      return syncState.lastSyncAt
-        ? `GitHub 已同步 · ${formatPastTime(syncState.lastSyncAt)}`
-        : 'GitHub 尚未同步';
+      return '等待保存';
   }
 };
 
 export const StatusBar = ({
   dirtyDocumentCount,
-  syncState,
+  persistenceState,
 }: StatusBarProps) => {
   const [, setTick] = useState(0);
 
@@ -62,11 +47,9 @@ export const StatusBar = ({
     <footer className="status-bar">
       <div className="status-group">
         <span className="status-pill">
-          {dirtyDocumentCount > 0
-            ? `${dirtyDocumentCount} 个文档待同步`
-            : '远端无待同步内容'}
+          {dirtyDocumentCount > 0 ? `${dirtyDocumentCount} 个文档待保存` : '文档已落盘'}
         </span>
-        <span className="status-pill">{getSyncLabel(syncState)}</span>
+        <span className="status-pill">{getPersistenceLabel(persistenceState)}</span>
       </div>
     </footer>
   );

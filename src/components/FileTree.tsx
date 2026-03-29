@@ -126,7 +126,7 @@ const FolderNode = ({
                 <FileTextIcon width={14} height={14} />
               </span>
               <span className="tree-name">{document.title}</span>
-              {document.remoteDirty ? <span className="tree-dirty-dot" /> : null}
+              {document.dirty ? <span className="tree-dirty-dot" /> : null}
             </button>
             <button
               className="tree-action"
@@ -218,7 +218,7 @@ export const FileTree = ({
                 <FileTextIcon width={14} height={14} />
               </span>
               <span className="tree-name">{document.title}</span>
-              {document.remoteDirty ? <span className="tree-dirty-dot" /> : null}
+              {document.dirty ? <span className="tree-dirty-dot" /> : null}
             </button>
             <button
               className="tree-action"

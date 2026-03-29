@@ -37,7 +37,7 @@ type EditorPaneProps = {
   onExportDocument: () => void;
   exportDisabled?: boolean;
   onOpenSettings: () => void;
-  onSyncNow: () => void;
+  onSaveNow: () => void;
   onToggleMode: () => void;
   onToggleSidebar: () => void;
 };
@@ -72,7 +72,8 @@ type EditorTextSegment =
 
 type MarkdownTextMap = {
   sourceToText: number[];
-  textToSource: number[];
+  textToSourceStart: number[];
+  textToSourceEnd: number[];
   textLength: number;
 };
 
@@ -90,10 +91,8 @@ type PythonOverlayItem = {
 };
 
 type AIInsertSession = {
-  blockStart: number;
-  contentStart: number;
-  contentEnd: number;
-  trailingPaddingLength: number;
+  prefix: string;
+  suffix: string;
 };
 
 type AIUndoEntry = {
@@ -157,46 +156,25 @@ const createAIInsertSession = (
   const after = markdown.slice(safeEnd);
   const leadingGap = getLeadingGap(before);
   const trailingGap = getTrailingGap(after);
-  const contentStart = before.length + leadingGap.length;
+  const prefix = `${before}${leadingGap}`;
+  const suffix = `${trailingGap}${after}`;
 
   return {
-    markdown: `${before}${leadingGap}${trailingGap}${after}`,
+    markdown: `${prefix}${suffix}`,
     session: {
-      blockStart: before.length,
-      contentStart,
-      contentEnd: contentStart,
-      trailingPaddingLength: trailingGap.length,
+      prefix,
+      suffix,
     },
   };
 };
 
 const updateAIInsertSession = (
-  markdown: string,
   session: AIInsertSession,
   nextContent: string,
-): {
-  markdown: string;
-  session: AIInsertSession;
-} => {
-  const contentEnd = session.contentStart + nextContent.length;
+): string => `${session.prefix}${nextContent}${session.suffix}`;
 
-  return {
-    markdown: `${markdown.slice(0, session.contentStart)}${nextContent}${markdown.slice(
-      session.contentEnd,
-    )}`,
-    session: {
-      ...session,
-      contentEnd,
-    },
-  };
-};
-
-const removeAIInsertSession = (markdown: string, session: AIInsertSession) =>
-  normalizeGeneratedBlockSpacing(
-    `${markdown.slice(0, session.blockStart)}${markdown.slice(
-      session.contentEnd + session.trailingPaddingLength,
-    )}`,
-  );
+const removeAIInsertSession = (session: AIInsertSession) =>
+  normalizeGeneratedBlockSpacing(`${session.prefix}${session.suffix}`);
 
 const getLinePrefixLength = (line: string) => {
   let offset = 0;
@@ -290,14 +268,20 @@ const buildMarkdownTextMap = (markdown: string): MarkdownTextMap => {
     sourceToText[position + 1] = textLength;
   }
 
-  const textToSource = new Array<number>(textLength + 1).fill(markdown.length);
+  const textToSourceStart = new Array<number>(textLength + 1).fill(markdown.length);
+  const textToSourceEnd = new Array<number>(textLength + 1).fill(0);
   for (let position = 0; position <= markdown.length; position += 1) {
-    textToSource[sourceToText[position]] = position;
+    const textOffset = sourceToText[position];
+    if (textToSourceStart[textOffset] === markdown.length) {
+      textToSourceStart[textOffset] = position;
+    }
+    textToSourceEnd[textOffset] = position;
   }
 
   return {
     sourceToText,
-    textToSource,
+    textToSourceStart,
+    textToSourceEnd,
     textLength,
   };
 };
@@ -577,9 +561,20 @@ const getVisualSelectionRect = (container: HTMLDivElement) => {
     return null;
   }
 
-  const rect = range.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) return null;
-  return rect;
+  const trailingRange = range.cloneRange();
+  trailingRange.collapse(false);
+
+  const trailingRects = trailingRange.getClientRects();
+  const trailingRect =
+    trailingRects[trailingRects.length - 1] ?? trailingRange.getBoundingClientRect();
+
+  if (trailingRect.width !== 0 || trailingRect.height !== 0) {
+    return trailingRect;
+  }
+
+  const fallbackRect = range.getBoundingClientRect();
+  if (fallbackRect.width === 0 && fallbackRect.height === 0) return null;
+  return fallbackRect;
 };
 
 const getTextareaSelectionRect = (
@@ -948,7 +943,7 @@ const EditorPane = ({
   onExportDocument,
   exportDisabled = false,
   onOpenSettings,
-  onSyncNow,
+  onSaveNow,
   onToggleMode,
   onToggleSidebar,
 }: EditorPaneProps) => {
@@ -1064,7 +1059,7 @@ const EditorPane = ({
   ) => {
     if (!document) return;
 
-    const sessionId = `${document.id}:${session.contentStart}`;
+    const sessionId = `${document.id}:${session.prefix.length}`;
     clearAIResources(sessionId);
 
     const controller = new AbortController();
@@ -1075,12 +1070,7 @@ const EditorPane = ({
 
     const flushContent = () => {
       aiFlushTimersRef.current.delete(sessionId);
-      const { markdown: updatedMarkdown, session: updatedSession } = updateAIInsertSession(
-        markdownRef.current,
-        activeSession,
-        nextContent,
-      );
-      activeSession = updatedSession;
+      const updatedMarkdown = updateAIInsertSession(activeSession, nextContent);
 
       if (updatedMarkdown !== markdownRef.current) {
         applyMarkdown(updatedMarkdown, 'ai');
@@ -1114,7 +1104,7 @@ const EditorPane = ({
       flushContent();
       if (!nextContent.trim()) {
         aiPendingUndoRef.current = null;
-        applyMarkdown(removeAIInsertSession(markdownRef.current, activeSession), 'ai');
+        applyMarkdown(removeAIInsertSession(activeSession), 'ai');
       } else if (aiPendingUndoRef.current?.documentId === document.id) {
         aiUndoEntryRef.current = {
           documentId: document.id,
@@ -1131,7 +1121,7 @@ const EditorPane = ({
 
       const message = error instanceof Error ? error.message : 'AI 生成失败';
       aiPendingUndoRef.current = null;
-      applyMarkdown(removeAIInsertSession(markdownRef.current, activeSession), 'ai');
+      applyMarkdown(removeAIInsertSession(activeSession), 'ai');
       window.alert(`AI 生成失败：${message}`);
     } finally {
       clearAIResources(sessionId);
@@ -1276,11 +1266,15 @@ const EditorPane = ({
       const map = markdownMapRef.current;
       const textStart = Math.min(Math.max(snapshot.textStart, 0), map.textLength);
       const textEnd = Math.min(Math.max(snapshot.textEnd, 0), map.textLength);
+      const selectionStart = Math.min(textStart, textEnd);
+      const selectionEnd = Math.max(textStart, textEnd);
 
       syncSelectionState(
         {
-          sourceStart: map.textToSource[textStart] ?? markdownLength,
-          sourceEnd: map.textToSource[textEnd] ?? markdownLength,
+          sourceStart:
+            map.textToSourceStart[selectionStart] ?? markdownLength,
+          sourceEnd:
+            map.textToSourceEnd[selectionEnd] ?? markdownLength,
           textStart,
           textEnd,
         },
@@ -1405,8 +1399,8 @@ const EditorPane = ({
             </button>
             <button
               className="icon-button"
-              onClick={onSyncNow}
-              title="立即同步"
+              onClick={onSaveNow}
+              title="立即保存"
               type="button"
             >
               <RefreshIcon width={16} height={16} />

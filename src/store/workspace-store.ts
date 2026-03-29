@@ -1,61 +1,47 @@
 import { create } from 'zustand';
 import {
-  deleteDocuments,
-  deleteFolders,
   loadWorkspaceSnapshot,
   persistAISettings,
-  persistDocument,
-  persistFolders,
-  persistGithubSettings,
-  persistSession,
+  persistWorkspaceSnapshot,
 } from '../lib/db';
 import {
   createDocumentRecord,
   createDocumentRecordFromMarkdown,
   createFolderRecord,
 } from '../lib/default-workspace';
-import {
-  isGithubConfigured,
-  syncDocumentToGithub,
-} from '../lib/github';
 import type {
   AISettings,
   DocumentRecord,
   FolderRecord,
-  GithubSettings,
-  SyncState,
+  PersistenceState,
   WorkspaceSession,
 } from '../types/workspace';
 import {
   defaultAISettings,
-  defaultGithubSettings,
   defaultWorkspaceSession,
   ROOT_FOLDER_ID,
 } from '../types/workspace';
 
-const LOCAL_SAVE_DELAY_MS = 500;
-const REMOTE_SYNC_DELAY_MS = 5 * 60 * 1000;
-const REMOTE_SYNC_POLL_MS = 15 * 1000;
+const SAVE_DELAY_MS = 500;
 
-const documentSaveTimers = new Map<string, number>();
-let sessionSaveTimer: number | undefined;
-let remoteSyncTimer: number | undefined;
-let syncLoopStarted = false;
-let remoteSyncInFlight = false;
+let workspaceSaveTimer: number | undefined;
+let saveInFlight = false;
+let versionCounter = 0;
 
 const nowIso = () => new Date().toISOString();
 
-const getEarliestPendingSync = (documents: DocumentRecord[]) => {
-  const timestamps = documents
-    .filter((document) => document.remoteDirty && document.pendingSyncSince)
-    .map((document) => new Date(document.pendingSyncSince ?? '').getTime())
-    .filter((value) => Number.isFinite(value));
-
-  if (timestamps.length === 0) return undefined;
-  return new Date(Math.min(...timestamps) + REMOTE_SYNC_DELAY_MS).toISOString();
+const allocateVersion = () => {
+  versionCounter += 1;
+  return versionCounter;
 };
 
-const saveSessionSoon = (
+const clearWorkspaceSaveTimer = () => {
+  if (!workspaceSaveTimer) return;
+  window.clearTimeout(workspaceSaveTimer);
+  workspaceSaveTimer = undefined;
+};
+
+const saveWorkspaceSoon = (
   get: () => WorkspaceStore,
   set: (
     partial:
@@ -63,139 +49,25 @@ const saveSessionSoon = (
       | ((state: WorkspaceStore) => Partial<WorkspaceStore>),
   ) => void,
 ) => {
-  if (sessionSaveTimer) {
-    window.clearTimeout(sessionSaveTimer);
-  }
-
-  sessionSaveTimer = window.setTimeout(async () => {
-    await persistSession(get().session);
-    set({ lastSessionPersistAt: nowIso() });
-  }, 200);
-};
-
-const saveDocumentSoon = (
-  documentId: string,
-  get: () => WorkspaceStore,
-  set: (
-    partial:
-      | Partial<WorkspaceStore>
-      | ((state: WorkspaceStore) => Partial<WorkspaceStore>),
-  ) => void,
-) => {
-  set({ browserSaveState: 'saving' });
-
-  const existing = documentSaveTimers.get(documentId);
-  if (existing) {
-    window.clearTimeout(existing);
-  }
-
-  const timer = window.setTimeout(async () => {
-    const document = get().documents.find((item) => item.id === documentId);
-    if (!document) return;
-
-    const savedAt = nowIso();
-    await persistDocument({
-      ...document,
-      lastLocalSaveAt: savedAt,
-    });
-
-    set((state) => ({
-      browserSaveState: 'saved',
-      lastBrowserSaveAt: savedAt,
-      documents: state.documents.map((item) =>
-        item.id === documentId ? { ...item, lastLocalSaveAt: savedAt } : item,
-      ),
-    }));
-  }, LOCAL_SAVE_DELAY_MS);
-
-  documentSaveTimers.set(documentId, timer);
-};
-
-const scheduleRemoteSync = (
-  get: () => WorkspaceStore,
-  set: (
-    partial:
-      | Partial<WorkspaceStore>
-      | ((state: WorkspaceStore) => Partial<WorkspaceStore>),
-  ) => void,
-  force = false,
-) => {
-  if (remoteSyncTimer) {
-    window.clearTimeout(remoteSyncTimer);
-    remoteSyncTimer = undefined;
-  }
+  clearWorkspaceSaveTimer();
 
   const state = get();
-  const dirtyDocuments = state.documents.filter((document) => document.remoteDirty);
-
-  if (dirtyDocuments.length === 0) {
-    set((current) => ({
-      syncState: {
-        ...current.syncState,
-        status: 'idle',
-        nextSyncAt: undefined,
-        lastError: null,
-      },
-    }));
+  if (state.workspaceVersion <= state.lastSavedWorkspaceVersion) {
     return;
   }
-
-  if (!isGithubConfigured(state.githubSettings)) {
-    set((current) => ({
-      syncState: {
-        ...current.syncState,
-        status: 'setup-required',
-        nextSyncAt: undefined,
-      },
-    }));
-    return;
-  }
-
-  const nextSyncAt = force ? nowIso() : getEarliestPendingSync(dirtyDocuments);
-  if (!nextSyncAt) return;
-
-  const waitMs = Math.max(new Date(nextSyncAt).getTime() - Date.now(), 0);
 
   set((current) => ({
-    syncState: {
-      ...current.syncState,
-      status: 'queued',
-      nextSyncAt,
+    browserSaveState: 'saving',
+    persistenceState: {
+      ...current.persistenceState,
+      status: 'saving',
       lastError: null,
     },
   }));
 
-  remoteSyncTimer = window.setTimeout(() => {
-    void get().syncDirtyDocuments();
-  }, waitMs);
-};
-
-const startSyncLoop = (
-  get: () => WorkspaceStore,
-  set: (
-    partial:
-      | Partial<WorkspaceStore>
-      | ((state: WorkspaceStore) => Partial<WorkspaceStore>),
-  ) => void,
-) => {
-  if (syncLoopStarted) return;
-  syncLoopStarted = true;
-
-  window.setInterval(() => {
-    const state = get();
-    const dueAt = state.syncState.nextSyncAt
-      ? new Date(state.syncState.nextSyncAt).getTime()
-      : undefined;
-
-    if (dueAt && dueAt <= Date.now()) {
-      void get().syncDirtyDocuments();
-      return;
-    }
-
-    if (state.documents.some((document) => document.remoteDirty)) {
-      scheduleRemoteSync(get, set);
-    }
-  }, REMOTE_SYNC_POLL_MS);
+  workspaceSaveTimer = window.setTimeout(() => {
+    void get().saveNow();
+  }, SAVE_DELAY_MS);
 };
 
 const resolveParentFolderId = (
@@ -225,14 +97,6 @@ const collectFolderIds = (folderId: string, folders: FolderRecord[]) => {
   return ids;
 };
 
-const clearDocumentTimer = (documentId: string) => {
-  const timer = documentSaveTimers.get(documentId);
-  if (timer) {
-    window.clearTimeout(timer);
-    documentSaveTimers.delete(documentId);
-  }
-};
-
 type BrowserSaveState = 'idle' | 'saving' | 'saved';
 
 export type WorkspaceStore = {
@@ -240,12 +104,12 @@ export type WorkspaceStore = {
   documents: DocumentRecord[];
   folders: FolderRecord[];
   session: WorkspaceSession;
-  githubSettings: GithubSettings;
   aiSettings: AISettings;
-  syncState: SyncState;
+  persistenceState: PersistenceState;
   browserSaveState: BrowserSaveState;
   lastBrowserSaveAt?: string;
-  lastSessionPersistAt?: string;
+  workspaceVersion: number;
+  lastSavedWorkspaceVersion: number;
   initialize: () => Promise<void>;
   createDocument: (title?: string, parentFolderId?: string | null) => string;
   createFolder: (name: string, parentFolderId?: string | null) => string;
@@ -264,11 +128,8 @@ export type WorkspaceStore = {
   updateDocumentMarkdown: (documentId: string, markdown: string) => void;
   toggleFolderExpanded: (folderId: string) => void;
   toggleSidebar: () => void;
-  updateGithubSettings: (settings: GithubSettings) => Promise<void>;
   updateAISettings: (settings: AISettings) => Promise<void>;
-  syncDirtyDocuments: () => Promise<void>;
-  syncNow: () => Promise<void>;
-  flushLocalPersistence: () => Promise<void>;
+  saveNow: () => Promise<void>;
 };
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
@@ -276,12 +137,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   documents: [],
   folders: [],
   session: defaultWorkspaceSession,
-  githubSettings: defaultGithubSettings,
   aiSettings: defaultAISettings,
-  syncState: { status: 'idle', lastError: null },
+  persistenceState: { status: 'idle', lastError: null },
   browserSaveState: 'idle',
   lastBrowserSaveAt: undefined,
-  lastSessionPersistAt: undefined,
+  workspaceVersion: 0,
+  lastSavedWorkspaceVersion: 0,
 
   initialize: async () => {
     if (get().hydrated) return;
@@ -296,33 +157,41 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           }
         : snapshot.session;
 
+    const hasLoadError = Boolean(snapshot.workspaceError);
+
     set({
       hydrated: true,
       documents: snapshot.documents,
       folders: snapshot.folders,
       session: nextSession,
-      githubSettings: snapshot.githubSettings,
       aiSettings: snapshot.aiSettings,
-      syncState: {
-        status: isGithubConfigured(snapshot.githubSettings)
-          ? snapshot.documents.some((document) => document.remoteDirty)
-            ? 'queued'
-            : 'idle'
-          : snapshot.documents.some((document) => document.remoteDirty)
-            ? 'setup-required'
-            : 'idle',
-        nextSyncAt: getEarliestPendingSync(snapshot.documents),
-        lastError: null,
-      },
-      browserSaveState: 'saved',
+      persistenceState: hasLoadError
+        ? {
+            status: 'error',
+            lastError: snapshot.workspaceError,
+          }
+        : {
+            status: 'saved',
+            lastSavedAt: snapshot.documents.reduce<string | undefined>(
+              (latest, document) => {
+                if (!document.lastSavedAt) return latest;
+                if (!latest || document.lastSavedAt > latest) return document.lastSavedAt;
+                return latest;
+              },
+              undefined,
+            ),
+            lastError: null,
+          },
+      browserSaveState: hasLoadError ? 'idle' : 'saved',
+      workspaceVersion: 0,
+      lastSavedWorkspaceVersion: hasLoadError ? -1 : 0,
     });
 
     if (nextSession !== snapshot.session) {
-      void persistSession(nextSession);
+      const version = allocateVersion();
+      set({ session: nextSession, workspaceVersion: version });
+      saveWorkspaceSoon(get, set);
     }
-
-    startSyncLoop(get, set);
-    scheduleRemoteSync(get, set);
   },
 
   createDocument: (title = 'Untitled note', parentFolderId) => {
@@ -333,6 +202,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       state.documents,
     );
     const document = createDocumentRecord(title, resolvedParent);
+    const version = allocateVersion();
 
     set((current) => ({
       documents: [...current.documents, document],
@@ -344,12 +214,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           new Set([...current.session.openDocumentIds, document.id]),
         ),
       },
-      browserSaveState: 'saving',
+      workspaceVersion: version,
     }));
 
-    saveDocumentSoon(document.id, get, set);
-    saveSessionSoon(get, set);
-    scheduleRemoteSync(get, set);
+    saveWorkspaceSoon(get, set);
     return document.id;
   },
 
@@ -361,6 +229,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       state.documents,
     );
     const folder = createFolderRecord(name, resolvedParent);
+    const version = allocateVersion();
 
     set((current) => ({
       folders: [...current.folders, folder],
@@ -368,10 +237,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         ...current.session,
         selectedFolderId: folder.id,
       },
+      workspaceVersion: version,
     }));
 
-    void persistFolders([folder]);
-    saveSessionSoon(get, set);
+    saveWorkspaceSoon(get, set);
     return folder.id;
   },
 
@@ -385,8 +254,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       nextOpenDocumentIds[nextOpenDocumentIds.length - 1] ??
       nextDocuments[nextDocuments.length - 1]?.id ??
       null;
-
-    clearDocumentTimer(documentId);
+    const version = allocateVersion();
 
     set({
       documents: nextDocuments,
@@ -398,10 +266,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
             ? fallbackActiveDocumentId
             : state.session.activeDocumentId,
       },
+      workspaceVersion: version,
     });
 
-    await Promise.all([deleteDocuments([documentId]), persistSession(get().session)]);
-    scheduleRemoteSync(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   deleteFolder: async (folderId) => {
@@ -414,8 +282,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       .filter((document) => document.parentFolderId && folderIds.has(document.parentFolderId))
       .map((document) => document.id);
 
-    documentIds.forEach(clearDocumentTimer);
-
     const nextFolders = state.folders.filter((folder) => !folderIds.has(folder.id));
     const nextDocuments = state.documents.filter(
       (document) => !documentIds.includes(document.id),
@@ -427,6 +293,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       nextOpenDocumentIds[nextOpenDocumentIds.length - 1] ??
       nextDocuments[nextDocuments.length - 1]?.id ??
       null;
+    const version = allocateVersion();
 
     set({
       folders: nextFolders,
@@ -441,14 +308,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           ? targetFolder.parentId
           : state.session.selectedFolderId,
       },
+      workspaceVersion: version,
     });
 
-    await Promise.all([
-      deleteDocuments(documentIds),
-      deleteFolders(Array.from(folderIds)),
-      persistSession(get().session),
-    ]);
-    scheduleRemoteSync(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   importMarkdownFiles: async (files, parentFolderId) => {
@@ -471,12 +334,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       state.session,
       state.documents,
     );
-    const savedAt = nowIso();
-    const createdDocuments = imports.map(({ title, markdown }) => ({
-      ...createDocumentRecordFromMarkdown(title, markdown, resolvedParent),
-      lastLocalSaveAt: savedAt,
-    }));
+    const createdDocuments = imports.map(({ title, markdown }) =>
+      createDocumentRecordFromMarkdown(title, markdown, resolvedParent),
+    );
     const firstDocumentId = createdDocuments[0]?.id ?? null;
+    const version = allocateVersion();
 
     set((current) => ({
       documents: [...current.documents, ...createdDocuments],
@@ -491,23 +353,18 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           ]),
         ),
       },
-      browserSaveState: 'saving',
-      lastBrowserSaveAt: savedAt,
+      workspaceVersion: version,
     }));
 
-    await Promise.all([
-      ...createdDocuments.map((document) => persistDocument(document)),
-      persistSession(get().session),
-    ]);
-
-    set({ browserSaveState: 'saved' });
-    scheduleRemoteSync(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   openDocument: (documentId) => {
     const state = get();
     const exists = state.documents.some((document) => document.id === documentId);
     if (!exists) return;
+
+    const version = allocateVersion();
 
     set((current) => ({
       session: {
@@ -518,9 +375,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           new Set([...current.session.openDocumentIds, documentId]),
         ),
       },
+      workspaceVersion: version,
     }));
 
-    saveSessionSoon(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   closeDocument: (documentId) => {
@@ -532,6 +390,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       state.session.activeDocumentId === documentId
         ? openDocumentIds[openDocumentIds.length - 1] ?? null
         : state.session.activeDocumentId;
+    const version = allocateVersion();
 
     set((current) => ({
       session: {
@@ -539,14 +398,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         openDocumentIds,
         activeDocumentId: nextActiveDocumentId,
       },
+      workspaceVersion: version,
     }));
 
-    saveSessionSoon(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   setActiveDocument: (documentId) => {
     const documentExists = get().documents.some((item) => item.id === documentId);
     if (!documentExists) return;
+
+    const version = allocateVersion();
 
     set((current) => ({
       session: {
@@ -554,36 +416,44 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         selectedFolderId: null,
         activeDocumentId: documentId,
       },
+      workspaceVersion: version,
     }));
 
-    saveSessionSoon(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   setSelectedFolder: (folderId) => {
+    const version = allocateVersion();
+
     set((current) => ({
       session: {
         ...current.session,
         selectedFolderId: folderId ?? ROOT_FOLDER_ID,
       },
+      workspaceVersion: version,
     }));
 
-    saveSessionSoon(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   setEditorMode: (mode) => {
+    const version = allocateVersion();
+
     set((current) => ({
       session: {
         ...current.session,
         editorMode: mode,
       },
+      workspaceVersion: version,
     }));
 
-    saveSessionSoon(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   updateDocumentTitle: (documentId, title) => {
     const trimmedTitle = title.trim() || 'Untitled note';
     const timestamp = nowIso();
+    const version = allocateVersion();
 
     set((state) => ({
       documents: state.documents.map((document) =>
@@ -592,20 +462,20 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
               ...document,
               title: trimmedTitle,
               updatedAt: timestamp,
-              remoteDirty: true,
-              pendingSyncSince: document.pendingSyncSince ?? timestamp,
-              syncError: null,
+              dirty: true,
+              saveError: null,
             }
           : document,
       ),
+      workspaceVersion: version,
     }));
 
-    saveDocumentSoon(documentId, get, set);
-    scheduleRemoteSync(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   updateDocumentMarkdown: (documentId, markdown) => {
     const timestamp = nowIso();
+    const version = allocateVersion();
 
     set((state) => ({
       documents: state.documents.map((document) =>
@@ -614,53 +484,49 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
               ...document,
               markdown,
               updatedAt: timestamp,
-              remoteDirty: true,
-              pendingSyncSince: document.pendingSyncSince ?? timestamp,
-              syncError: null,
+              dirty: true,
+              saveError: null,
             }
           : document,
       ),
+      workspaceVersion: version,
     }));
 
-    saveDocumentSoon(documentId, get, set);
-    scheduleRemoteSync(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   toggleFolderExpanded: (folderId) => {
-    let updatedFolder: FolderRecord | undefined;
+    const timestamp = nowIso();
+    const version = allocateVersion();
 
     set((state) => ({
-      folders: state.folders.map((folder) => {
-        if (folder.id !== folderId) return folder;
-        updatedFolder = {
-          ...folder,
-          expanded: !folder.expanded,
-          updatedAt: nowIso(),
-        };
-        return updatedFolder;
-      }),
+      folders: state.folders.map((folder) =>
+        folder.id === folderId
+          ? {
+              ...folder,
+              expanded: !folder.expanded,
+              updatedAt: timestamp,
+            }
+          : folder,
+      ),
+      workspaceVersion: version,
     }));
 
-    if (updatedFolder) {
-      void persistFolders([updatedFolder]);
-    }
+    saveWorkspaceSoon(get, set);
   },
 
   toggleSidebar: () => {
+    const version = allocateVersion();
+
     set((state) => ({
       session: {
         ...state.session,
         sidebarCollapsed: !state.session.sidebarCollapsed,
       },
+      workspaceVersion: version,
     }));
 
-    saveSessionSoon(get, set);
-  },
-
-  updateGithubSettings: async (settings) => {
-    set({ githubSettings: settings });
-    await persistGithubSettings(settings);
-    scheduleRemoteSync(get, set);
+    saveWorkspaceSoon(get, set);
   },
 
   updateAISettings: async (settings) => {
@@ -668,137 +534,91 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     await persistAISettings(settings);
   },
 
-  syncDirtyDocuments: async () => {
+  saveNow: async () => {
+    clearWorkspaceSaveTimer();
+
     const state = get();
-    const dirtyDocuments = state.documents
-      .filter((document) => document.remoteDirty)
-      .sort((left, right) =>
-        (left.pendingSyncSince ?? '').localeCompare(right.pendingSyncSince ?? ''),
-      );
-
-    if (dirtyDocuments.length === 0) {
+    if (state.workspaceVersion <= state.lastSavedWorkspaceVersion) {
       set((current) => ({
-        syncState: {
-          ...current.syncState,
-          status: 'idle',
-          nextSyncAt: undefined,
+        browserSaveState: 'saved',
+        persistenceState: {
+          ...current.persistenceState,
+          status: current.persistenceState.lastError ? 'error' : 'saved',
         },
       }));
       return;
     }
 
-    if (!isGithubConfigured(state.githubSettings)) {
-      set((current) => ({
-        syncState: {
-          ...current.syncState,
-          status: 'setup-required',
-          nextSyncAt: undefined,
-          lastError: '请先填写 GitHub 仓库配置后再同步。',
-        },
-      }));
-      return;
-    }
+    if (saveInFlight) return;
+    saveInFlight = true;
 
-    if (remoteSyncInFlight) return;
-    remoteSyncInFlight = true;
+    const saveStartedAt = nowIso();
+    const targetVersion = state.workspaceVersion;
 
     set((current) => ({
-      syncState: {
-        ...current.syncState,
-        status: 'syncing',
+      browserSaveState: 'saving',
+      persistenceState: {
+        ...current.persistenceState,
+        status: 'saving',
         lastError: null,
       },
     }));
 
     try {
-      for (const document of dirtyDocuments) {
-        const result = await syncDocumentToGithub(
-          document,
-          get().folders,
-          get().githubSettings,
-        );
-        const syncedAt = nowIso();
-
-        set((current) => ({
-          documents: current.documents.map((item) =>
-            item.id === document.id
-              ? {
-                  ...item,
-                  remoteSha: result.sha,
-                  remoteDirty: false,
-                  lastRemoteSyncAt: syncedAt,
-                  pendingSyncSince: undefined,
-                  syncError: null,
-                }
-              : item,
-          ),
-          syncState: {
-            ...current.syncState,
-            lastSyncAt: syncedAt,
-            lastError: null,
-          },
-        }));
-
-        const updatedDocument = get().documents.find((item) => item.id === document.id);
-        if (updatedDocument) {
-          await persistDocument(updatedDocument);
-        }
-      }
-
-      scheduleRemoteSync(get, set);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : '远端同步失败，请稍后重试。';
+      const result = await persistWorkspaceSnapshot({
+        documents: state.documents,
+        folders: state.folders,
+        session: state.session,
+      });
 
       set((current) => ({
-        syncState: {
-          ...current.syncState,
-          status: 'error',
-          lastError: message,
-        },
+        browserSaveState: 'saved',
+        lastBrowserSaveAt: result.savedAt,
+        lastSavedWorkspaceVersion: Math.max(
+          current.lastSavedWorkspaceVersion,
+          targetVersion,
+        ),
         documents: current.documents.map((document) =>
-          document.remoteDirty
+          document.updatedAt <= saveStartedAt
             ? {
                 ...document,
-                syncError: message,
+                dirty: false,
+                lastSavedAt: result.savedAt,
+                saveError: null,
               }
             : document,
         ),
+        persistenceState: {
+          status: 'saved',
+          lastSavedAt: result.savedAt,
+          lastError: null,
+        },
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : '后端保存失败，请稍后重试。';
+
+      set((current) => ({
+        browserSaveState: 'idle',
+        documents: current.documents.map((document) =>
+          document.dirty
+            ? {
+                ...document,
+                saveError: message,
+              }
+            : document,
+        ),
+        persistenceState: {
+          ...current.persistenceState,
+          status: 'error',
+          lastError: message,
+        },
       }));
     } finally {
-      remoteSyncInFlight = false;
-      scheduleRemoteSync(get, set);
+      saveInFlight = false;
+      if (get().workspaceVersion > targetVersion) {
+        saveWorkspaceSoon(get, set);
+      }
     }
-  },
-
-  syncNow: async () => {
-    scheduleRemoteSync(get, set, true);
-    await get().syncDirtyDocuments();
-  },
-
-  flushLocalPersistence: async () => {
-    const state = get();
-    const savedAt = nowIso();
-
-    await Promise.all([
-      ...state.documents.map((document) =>
-        persistDocument({
-          ...document,
-          lastLocalSaveAt: savedAt,
-        }),
-      ),
-      persistSession(state.session),
-      persistFolders(state.folders),
-      persistGithubSettings(state.githubSettings),
-    ]);
-
-    set((current) => ({
-      browserSaveState: 'saved',
-      lastBrowserSaveAt: savedAt,
-      documents: current.documents.map((document) => ({
-        ...document,
-        lastLocalSaveAt: savedAt,
-      })),
-    }));
   },
 }));

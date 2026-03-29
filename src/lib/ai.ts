@@ -23,6 +23,8 @@ const readResponseText = async (response: Response) => {
   }
 };
 
+const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+
 const parseSSE = async (
   response: Response,
   onData: (payload: string) => void,
@@ -35,6 +37,15 @@ const parseSSE = async (
 
   const decoder = new TextDecoder();
   let buffer = '';
+  let eventDataLines: string[] = [];
+
+  const flushEvent = () => {
+    if (eventDataLines.length === 0) return;
+    const data = eventDataLines.join('\n').trim();
+    eventDataLines = [];
+    if (!data || data === '[DONE]') return;
+    onData(data);
+  };
 
   while (true) {
     if (signal?.aborted) {
@@ -42,36 +53,34 @@ const parseSSE = async (
     }
 
     const { done, value } = await reader.read();
-    if (done) break;
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 
-    buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split(/\n\n/);
-    buffer = events.pop() ?? '';
+    let lineBreakMatch = buffer.match(/\r?\n/);
+    while (lineBreakMatch) {
+      const newlineIndex = lineBreakMatch.index ?? 0;
+      const newlineLength = lineBreakMatch[0].length;
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + newlineLength);
 
-    for (const event of events) {
-      const data = event
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trim())
-        .join('\n');
+      if (line === '') {
+        flushEvent();
+      } else if (line.startsWith('data:')) {
+        eventDataLines.push(line.slice(5).trimStart());
+      }
 
-      if (!data || data === '[DONE]') continue;
-      onData(data);
+      lineBreakMatch = buffer.match(/\r?\n/);
     }
+
+    if (done) break;
   }
 
+  buffer += decoder.decode();
   const tail = buffer.trim();
-  if (!tail) return;
-
-  const data = tail
-    .split('\n')
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).trim())
-    .join('\n');
-
-  if (data && data !== '[DONE]') {
-    onData(data);
+  if (tail.startsWith('data:')) {
+    eventDataLines.push(tail.slice(5).trimStart());
   }
+
+  flushEvent();
 };
 
 const getOpenAIMessageDelta = (payload: string) => {
@@ -170,6 +179,7 @@ export const streamAIText = async (
         body: JSON.stringify({
           model: settings.openAICompatible.model,
           temperature: settings.temperature,
+          max_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
           stream: true,
           messages: [
             {
@@ -224,6 +234,7 @@ export const streamAIText = async (
         ],
         generationConfig: {
           temperature: settings.temperature,
+          maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
         },
       }),
     },

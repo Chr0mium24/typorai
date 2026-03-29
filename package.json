@@ -5,9 +5,9 @@
   "packageManager": "pnpm@10.15.0",
   "type": "module",
   "scripts": {
-    "start": "bash scripts/start.sh",
+    "start": "bash start.sh",
     "dev:client": "vite",
-    "dev": "vite",
+    "dev": "bash start.sh",
     "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build",
     "preview": "vite preview",
     "serve": "node .server-dist/server/index.js"

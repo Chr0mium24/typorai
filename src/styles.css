@@ -1257,6 +1257,45 @@ body {
   gap: 0.9rem;
 }
 
+.login-form .field {
+  gap: 0.42rem;
+}
+
+.login-form .field span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.login-form input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.login-form input::placeholder {
+  color: color-mix(in srgb, var(--muted) 82%, white);
+}
+
+.login-form input:focus {
+  border-color: rgba(181, 79, 44, 0.34);
+  box-shadow: 0 0 0 4px rgba(181, 79, 44, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.login-form input:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
 .login-error {
   color: var(--accent-strong);
   font-size: 0.92rem;

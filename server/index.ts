@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { buildDefaultWorkspace, type WorkspaceSnapshot } from '../shared/workspace.js';
@@ -8,11 +8,11 @@ const host = process.env.API_HOST ?? '127.0.0.1';
 const port = Number(process.env.API_PORT ?? 3001);
 const adminUsername = process.env.ADMIN_USERNAME ?? 'admin';
 const adminPassword = process.env.ADMIN_PASSWORD ?? 'admin';
-const authSecret = process.env.AUTH_SECRET ?? 'typorai-local-admin-secret';
 const authCookieName = 'typorai_admin_session';
 const authTtlSeconds = 60 * 60 * 24 * 30;
 const rootDir = process.cwd();
 const dataDir = join(rootDir, 'data');
+const authSecretFile = join(dataDir, 'auth-secret');
 const workspaceFile = join(dataDir, 'workspace.json');
 const distDir = join(rootDir, 'dist');
 
@@ -103,6 +103,32 @@ const readRequestBody = async (
 
   return Buffer.concat(chunks).toString('utf-8');
 };
+
+const ensureAuthSecret = async () => {
+  const configuredSecret = process.env.AUTH_SECRET?.trim();
+  if (configuredSecret) return configuredSecret;
+
+  await fs.mkdir(dataDir, { recursive: true });
+
+  try {
+    const existingSecret = (await fs.readFile(authSecretFile, 'utf-8')).trim();
+    if (existingSecret) return existingSecret;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  const generatedSecret = randomBytes(32).toString('hex');
+  await fs.writeFile(authSecretFile, `${generatedSecret}\n`, {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
+  console.warn(`[typorai] generated auth secret at ${authSecretFile}`);
+  return generatedSecret;
+};
+
+const authSecret = await ensureAuthSecret();
 
 const parseCookies = (cookieHeader: string | undefined) =>
   Object.fromEntries(

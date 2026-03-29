@@ -62,6 +62,18 @@ type EditorTextSegment =
       length: number;
     }
   | {
+      kind: 'atom';
+      beforeBoundary: {
+        node: Node;
+        offset: number;
+      };
+      afterBoundary: {
+        node: Node;
+        offset: number;
+      };
+      length: number;
+    }
+  | {
       kind: 'break';
       boundary: {
         node: Text;
@@ -213,6 +225,86 @@ const getLinePrefixLength = (line: string) => {
   return offset;
 };
 
+const isEscapedMarkdownCharacter = (value: string, index: number) => {
+  let backslashCount = 0;
+
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    backslashCount += 1;
+  }
+
+  return backslashCount % 2 === 1;
+};
+
+const findMathDelimiterEnd = (
+  line: string,
+  startIndex: number,
+  delimiterLength: 1 | 2,
+) => {
+  for (let index = startIndex; index < line.length; index += 1) {
+    if (line[index] !== '$') continue;
+    if (isEscapedMarkdownCharacter(line, index)) continue;
+
+    if (delimiterLength === 2) {
+      if (line[index + 1] === '$') {
+        return index;
+      }
+      continue;
+    }
+
+    if (line[index + 1] !== '$') {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
+const hideMathDelimiterVisibility = (
+  line: string,
+  lineStart: number,
+  visible: boolean[],
+) => {
+  const trimmed = line.trim();
+
+  if (trimmed === '$$') {
+    const delimiterStart = line.indexOf('$$');
+    if (delimiterStart >= 0) {
+      visible[lineStart + delimiterStart] = false;
+      visible[lineStart + delimiterStart + 1] = false;
+    }
+    return;
+  }
+
+  let index = 0;
+
+  while (index < line.length) {
+    if (line[index] !== '$' || isEscapedMarkdownCharacter(line, index)) {
+      index += 1;
+      continue;
+    }
+
+    const delimiterLength = line[index + 1] === '$' ? 2 : 1;
+    const contentStart = index + delimiterLength;
+    const delimiterEnd = findMathDelimiterEnd(
+      line,
+      contentStart,
+      delimiterLength === 2 ? 2 : 1,
+    );
+
+    if (delimiterEnd < 0) {
+      index = contentStart;
+      continue;
+    }
+
+    for (let offset = 0; offset < delimiterLength; offset += 1) {
+      visible[lineStart + index + offset] = false;
+      visible[lineStart + delimiterEnd + offset] = false;
+    }
+
+    index = delimiterEnd + delimiterLength;
+  }
+};
+
 const buildMarkdownTextMap = (markdown: string): MarkdownTextMap => {
   const sourceToText = new Array<number>(markdown.length + 1).fill(0);
   const visible = new Array<boolean>(markdown.length).fill(false);
@@ -254,6 +346,8 @@ const buildMarkdownTextMap = (markdown: string): MarkdownTextMap => {
       ) {
         visible[position] = true;
       }
+
+      hideMathDelimiterVisibility(line, lineStart, visible);
     }
 
     index = newlineIndex >= 0 ? newlineIndex + 1 : lineEnd + 1;
@@ -319,6 +413,15 @@ const isCodeMirrorTextNode = (parent: Element) => Boolean(parent.closest('.cm-co
 const isIgnoredEditorElement = (element: Element) =>
   Boolean(element.closest(editorUiTextExclusionSelector));
 
+const getEditorAtomLength = (node: Node) => {
+  if (!(node instanceof Element)) return null;
+  if (!node.matches('[contenteditable="false"][data-value][data-type^="math"]')) {
+    return null;
+  }
+
+  return node.getAttribute('data-value')?.length ?? 0;
+};
+
 const isEditorTextNode = (node: Node): node is Text => {
   if (node.nodeType !== Node.TEXT_NODE) return false;
   if (!node.textContent) return false;
@@ -332,6 +435,11 @@ const isEditorTextNode = (node: Node): node is Text => {
 };
 
 const getNodeTextLength = (node: Node): number => {
+  const atomLength = getEditorAtomLength(node);
+  if (atomLength !== null) {
+    return atomLength;
+  }
+
   if (isEditorTextNode(node)) {
     return node.textContent?.length ?? 0;
   }
@@ -400,6 +508,28 @@ const collectEditorTextSegments = (editor: HTMLElement) => {
   let totalLength = 0;
 
   const walk = (node: Node): Text | null => {
+    const atomLength = getEditorAtomLength(node);
+    if (atomLength !== null) {
+      const parent = node.parentNode;
+      if (parent) {
+        const childIndex = Array.prototype.indexOf.call(parent.childNodes, node);
+        segments.push({
+          kind: 'atom',
+          beforeBoundary: {
+            node: parent,
+            offset: childIndex,
+          },
+          afterBoundary: {
+            node: parent,
+            offset: childIndex + 1,
+          },
+          length: atomLength,
+        });
+        totalLength += atomLength;
+      }
+      return null;
+    }
+
     if (isEditorTextNode(node)) {
       const length = node.textContent?.length ?? 0;
       segments.push({
@@ -497,6 +627,12 @@ const restoreVisualSelection = (
       if (consumed + segment.length >= normalizedTarget) {
         if (segment.kind === 'break') {
           return segment.boundary;
+        }
+
+        if (segment.kind === 'atom') {
+          return normalizedTarget === consumed
+            ? segment.beforeBoundary
+            : segment.afterBoundary;
         }
 
         selectedNode = segment.node;

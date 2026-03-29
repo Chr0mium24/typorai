@@ -5,6 +5,7 @@ type SettingsPanelProps = {
   open: boolean;
   aiSettings: AISettings;
   onClose: () => void;
+  onLogout: () => Promise<void>;
   onSaveAI: (settings: AISettings) => Promise<void>;
 };
 
@@ -12,6 +13,7 @@ export const SettingsPanel = ({
   open,
   aiSettings,
   onClose,
+  onLogout,
   onSaveAI,
 }: SettingsPanelProps) => {
   const [aiDraft, setAiDraft] = useState(aiSettings);
@@ -210,6 +212,9 @@ export const SettingsPanel = ({
         </section>
 
         <div className="settings-actions">
+          <button className="ghost-button" onClick={() => void onLogout()} type="button">
+            退出登录
+          </button>
           <button className="ghost-button" onClick={onClose} type="button">
             取消
           </button>

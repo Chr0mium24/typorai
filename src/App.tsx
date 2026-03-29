@@ -1,8 +1,10 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { LoginPage } from './components/LoginPage';
 import { Sidebar } from './components/Sidebar';
 import { TabBar } from './components/TabBar';
 import { StatusBar } from './components/StatusBar';
 import { SettingsPanel } from './components/SettingsPanel';
+import { fetchAuthSession, loginAsAdmin, logoutAuthSession } from './lib/auth';
 import { useWorkspaceStore } from './store/workspace-store';
 
 const EditorPane = lazy(() => import('./components/EditorPane'));
@@ -24,6 +26,10 @@ const getMarkdownFilename = (title: string, slug: string) => {
 };
 
 function App() {
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>(
+    'checking',
+  );
+  const [authLoading, setAuthLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -64,8 +70,31 @@ function App() {
   } = useWorkspaceStore();
 
   useEffect(() => {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      try {
+        const session = await fetchAuthSession();
+        if (cancelled) return;
+
+        setAuthStatus(session.authenticated ? 'authenticated' : 'unauthenticated');
+      } catch {
+        if (cancelled) return;
+        setAuthStatus('unauthenticated');
+      }
+    };
+
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
     void initialize();
-  }, [initialize]);
+  }, [authStatus, initialize]);
 
   useEffect(() => {
     const flush = () => {
@@ -239,6 +268,35 @@ function App() {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleLogin = async (credentials: { username: string; password: string }) => {
+    setAuthLoading(true);
+
+    try {
+      await loginAsAdmin(credentials.username, credentials.password);
+      setAuthStatus('authenticated');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logoutAuthSession();
+    window.location.reload();
+  };
+
+  if (authStatus === 'checking') {
+    return (
+      <div className="app-loading">
+        <p className="eyebrow">Checking session</p>
+        <h1>正在验证管理员身份...</h1>
+      </div>
+    );
+  }
+
+  if (authStatus !== 'authenticated') {
+    return <LoginPage loading={authLoading} onSubmit={handleLogin} />;
+  }
+
   if (!hydrated) {
     return (
       <div className="app-loading">
@@ -353,6 +411,7 @@ function App() {
           open={settingsOpen}
           aiSettings={aiSettings}
           onClose={() => setSettingsOpen(false)}
+          onLogout={handleLogout}
           onSaveAI={updateAISettings}
         />
       </div>

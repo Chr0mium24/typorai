@@ -1188,6 +1188,23 @@ const EditorPane = ({
     }
   };
 
+  const restoreAIPreGenerationMarkdown = (beforeMarkdown: string) => {
+    aiControllersRef.current.forEach((controller) => controller.abort());
+    aiControllersRef.current.clear();
+    aiFlushTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    aiFlushTimersRef.current.clear();
+    aiGenerationInFlightRef.current = false;
+    aiPendingUndoRef.current = null;
+    aiUndoEntryRef.current = null;
+    setSelectionState({
+      hasSelection: false,
+      excerpt: '',
+      top: 0,
+      left: 0,
+    });
+    applyMarkdown(beforeMarkdown, 'ai');
+  };
+
   const runAIStream = async (
     session: AIInsertSession,
     selectedMarkdown: string,
@@ -1436,18 +1453,22 @@ const EditorPane = ({
       const key = event.key.toLowerCase();
 
       if (key === 'z' && !event.shiftKey) {
+        const pendingUndo = aiPendingUndoRef.current;
         const undoEntry = aiUndoEntryRef.current;
-        if (!document || !undoEntry || undoEntry.documentId !== document.id) return;
+        if (!document) return;
+
+        const beforeMarkdown =
+          pendingUndo?.documentId === document.id
+            ? pendingUndo.beforeMarkdown
+            : undoEntry?.documentId === document.id
+              ? undoEntry.beforeMarkdown
+              : null;
+
+        if (!beforeMarkdown) return;
 
         event.preventDefault();
-        aiControllersRef.current.forEach((controller) => controller.abort());
-        aiControllersRef.current.clear();
-        aiFlushTimersRef.current.forEach((timer) => window.clearTimeout(timer));
-        aiFlushTimersRef.current.clear();
-        aiGenerationInFlightRef.current = false;
-        aiPendingUndoRef.current = null;
-        aiUndoEntryRef.current = null;
-        applyMarkdown(undoEntry.beforeMarkdown, 'ai');
+        event.stopPropagation();
+        restoreAIPreGenerationMarkdown(beforeMarkdown);
         return;
       }
 
@@ -1455,11 +1476,12 @@ const EditorPane = ({
       if (!selectionState.hasSelection) return;
 
       event.preventDefault();
+      event.stopPropagation();
       void handleAskAI();
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [selectionState.hasSelection, document?.id, aiSettings, mode]);
 
   const captureSourceSelection = (

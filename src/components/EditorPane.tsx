@@ -539,10 +539,35 @@ const EditorPane = ({
       return;
     }
 
-    window.requestAnimationFrame(() => {
-      if (!visualEditorRef.current) return;
-      restoreVisualSelection(visualEditorRef.current, sourceSelectionRef.current);
-    });
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 12;
+
+    const restoreSelection = () => {
+      if (cancelled || !visualEditorRef.current) return;
+
+      const snapshot = sourceSelectionRef.current;
+      restoreVisualSelection(visualEditorRef.current, snapshot);
+
+      const restoredSnapshot = getSelectionTextSnapshotFromEditor(visualEditorRef.current);
+      const hasRestoredSelection =
+        restoredSnapshot &&
+        restoredSnapshot.textStart === snapshot.textStart &&
+        restoredSnapshot.textEnd === snapshot.textEnd;
+
+      if (hasRestoredSelection || attempts >= maxAttempts) {
+        return;
+      }
+
+      attempts += 1;
+      window.requestAnimationFrame(restoreSelection);
+    };
+
+    window.requestAnimationFrame(restoreSelection);
+
+    return () => {
+      cancelled = true;
+    };
   }, [document?.id, mode]);
 
   useEffect(() => {

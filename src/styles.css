@@ -1368,6 +1368,10 @@ body {
     gap: 0;
   }
 
+  .app-shell.is-sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;

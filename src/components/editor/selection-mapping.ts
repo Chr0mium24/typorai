@@ -81,6 +81,30 @@ const getLinePrefixLength = (line: string) => {
   return offset;
 };
 
+const zeroContributionRange = (
+  textContribution: number[],
+  start: number,
+  end: number,
+) => {
+  for (let position = start; position < end; position += 1) {
+    textContribution[position] = 0;
+  }
+};
+
+const hasVisibleContribution = (
+  textContribution: number[],
+  start: number,
+  length: number,
+) => {
+  for (let position = start; position < start + length; position += 1) {
+    if (textContribution[position] !== 0) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const isEscapedMarkdownCharacter = (value: string, index: number) => {
   let backslashCount = 0;
 
@@ -89,6 +113,348 @@ const isEscapedMarkdownCharacter = (value: string, index: number) => {
   }
 
   return backslashCount % 2 === 1;
+};
+
+const isAsciiLetterOrDigit = (value?: string) => Boolean(value?.match(/[A-Za-z0-9]/));
+
+const isMarkdownEscapableCharacter = (value?: string) =>
+  Boolean(value?.match(/[\\`*_{}\[\]()#+\-.!~<>|]/));
+
+const isProtectedOffset = (
+  offset: number,
+  protectedRanges: Array<{
+    start: number;
+    end: number;
+  }>,
+) => protectedRanges.some((range) => offset >= range.start && offset < range.end);
+
+const isUnderscoreDelimiter = (token: string) => token[0] === '_';
+
+const isValidUnderscoreDelimiterBoundary = (line: string, index: number, length: number) => {
+  const previous = line[index - 1];
+  const next = line[index + length];
+
+  return !(isAsciiLetterOrDigit(previous) && isAsciiLetterOrDigit(next));
+};
+
+const findClosingBracket = (line: string, startIndex: number) => {
+  let depth = 0;
+
+  for (let index = startIndex; index < line.length; index += 1) {
+    if (isEscapedMarkdownCharacter(line, index)) continue;
+
+    if (line[index] === '[') {
+      depth += 1;
+      continue;
+    }
+
+    if (line[index] === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+};
+
+const findClosingParenthesis = (line: string, startIndex: number) => {
+  let depth = 0;
+
+  for (let index = startIndex; index < line.length; index += 1) {
+    if (isEscapedMarkdownCharacter(line, index)) continue;
+
+    if (line[index] === '(') {
+      depth += 1;
+      continue;
+    }
+
+    if (line[index] === ')') {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+};
+
+const hideEscapedMarkdownSyntax = (
+  line: string,
+  lineStart: number,
+  textContribution: number[],
+  protectedRanges: Array<{
+    start: number;
+    end: number;
+  }>,
+) => {
+  for (let index = 0; index < line.length - 1; index += 1) {
+    if (line[index] !== '\\') continue;
+    if (!isMarkdownEscapableCharacter(line[index + 1])) continue;
+    if (isProtectedOffset(index, protectedRanges)) continue;
+
+    textContribution[lineStart + index] = 0;
+  }
+};
+
+const hideInlineCodeDelimiterVisibility = (
+  line: string,
+  lineStart: number,
+  textContribution: number[],
+  protectedRanges: Array<{
+    start: number;
+    end: number;
+  }>,
+) => {
+  let index = 0;
+
+  while (index < line.length) {
+    if (line[index] !== '`' || isEscapedMarkdownCharacter(line, index)) {
+      index += 1;
+      continue;
+    }
+
+    let delimiterLength = 1;
+    while (line[index + delimiterLength] === '`') {
+      delimiterLength += 1;
+    }
+
+    const closingToken = '`'.repeat(delimiterLength);
+    let closingIndex = line.indexOf(closingToken, index + delimiterLength);
+
+    while (closingIndex >= 0 && isEscapedMarkdownCharacter(line, closingIndex)) {
+      closingIndex = line.indexOf(closingToken, closingIndex + 1);
+    }
+
+    if (closingIndex < 0) {
+      index += delimiterLength;
+      continue;
+    }
+
+    zeroContributionRange(
+      textContribution,
+      lineStart + index,
+      lineStart + index + delimiterLength,
+    );
+    zeroContributionRange(
+      textContribution,
+      lineStart + closingIndex,
+      lineStart + closingIndex + delimiterLength,
+    );
+    protectedRanges.push({
+      start: index + delimiterLength,
+      end: closingIndex,
+    });
+
+    index = closingIndex + delimiterLength;
+  }
+};
+
+const hideLinkSyntaxVisibility = (
+  line: string,
+  lineStart: number,
+  textContribution: number[],
+  protectedRanges: Array<{
+    start: number;
+    end: number;
+  }>,
+) => {
+  let index = 0;
+
+  while (index < line.length) {
+    const isImage = line[index] === '!' && line[index + 1] === '[';
+    const labelStart = isImage ? index + 1 : index;
+
+    if (line[labelStart] !== '[' || isEscapedMarkdownCharacter(line, labelStart)) {
+      index += 1;
+      continue;
+    }
+
+    if (isProtectedOffset(labelStart, protectedRanges)) {
+      index += 1;
+      continue;
+    }
+
+    const labelEnd = findClosingBracket(line, labelStart);
+    if (labelEnd < 0) {
+      index += 1;
+      continue;
+    }
+
+    if (line[labelEnd + 1] === '(') {
+      const destinationEnd = findClosingParenthesis(line, labelEnd + 1);
+      if (destinationEnd < 0) {
+        index += 1;
+        continue;
+      }
+
+      if (isImage) {
+        textContribution[lineStart + index] = 0;
+        zeroContributionRange(textContribution, lineStart + labelStart + 1, lineStart + labelEnd);
+      }
+
+      textContribution[lineStart + labelStart] = 0;
+      textContribution[lineStart + labelEnd] = 0;
+      zeroContributionRange(
+        textContribution,
+        lineStart + labelEnd + 1,
+        lineStart + destinationEnd + 1,
+      );
+      index = destinationEnd + 1;
+      continue;
+    }
+
+    if (line[labelEnd + 1] === '[') {
+      const referenceEnd = findClosingBracket(line, labelEnd + 1);
+      if (referenceEnd < 0) {
+        index += 1;
+        continue;
+      }
+
+      if (isImage) {
+        textContribution[lineStart + index] = 0;
+        zeroContributionRange(textContribution, lineStart + labelStart + 1, lineStart + labelEnd);
+      }
+
+      textContribution[lineStart + labelStart] = 0;
+      textContribution[lineStart + labelEnd] = 0;
+      zeroContributionRange(
+        textContribution,
+        lineStart + labelEnd + 1,
+        lineStart + referenceEnd + 1,
+      );
+      index = referenceEnd + 1;
+      continue;
+    }
+
+    index += 1;
+  }
+};
+
+const hidePairedDelimiterVisibility = (
+  line: string,
+  lineStart: number,
+  textContribution: number[],
+  token: string,
+  protectedRanges: Array<{
+    start: number;
+    end: number;
+  }>,
+) => {
+  let index = 0;
+
+  while (index <= line.length - token.length) {
+    if (!line.startsWith(token, index) || isEscapedMarkdownCharacter(line, index)) {
+      index += 1;
+      continue;
+    }
+
+    if (!hasVisibleContribution(textContribution, lineStart + index, token.length)) {
+      index += 1;
+      continue;
+    }
+
+    if (isProtectedOffset(index, protectedRanges)) {
+      index += 1;
+      continue;
+    }
+
+    if (isUnderscoreDelimiter(token) && !isValidUnderscoreDelimiterBoundary(line, index, token.length)) {
+      index += 1;
+      continue;
+    }
+
+    let closingIndex = index + token.length;
+    while (closingIndex <= line.length - token.length) {
+      if (!line.startsWith(token, closingIndex) || isEscapedMarkdownCharacter(line, closingIndex)) {
+        closingIndex += 1;
+        continue;
+      }
+
+      if (!hasVisibleContribution(textContribution, lineStart + closingIndex, token.length)) {
+        closingIndex += 1;
+        continue;
+      }
+
+      if (isProtectedOffset(closingIndex, protectedRanges)) {
+        closingIndex += 1;
+        continue;
+      }
+
+      if (
+        isUnderscoreDelimiter(token) &&
+        !isValidUnderscoreDelimiterBoundary(line, closingIndex, token.length)
+      ) {
+        closingIndex += 1;
+        continue;
+      }
+
+      const content = line.slice(index + token.length, closingIndex);
+      if (!content.trim()) {
+        closingIndex += 1;
+        continue;
+      }
+
+      zeroContributionRange(
+        textContribution,
+        lineStart + index,
+        lineStart + index + token.length,
+      );
+      zeroContributionRange(
+        textContribution,
+        lineStart + closingIndex,
+        lineStart + closingIndex + token.length,
+      );
+
+      index = closingIndex + token.length;
+      break;
+    }
+
+    if (closingIndex > line.length - token.length) {
+      index += token.length;
+    }
+  }
+};
+
+const hideReferenceDefinitionVisibility = (
+  line: string,
+  lineStart: number,
+  textContribution: number[],
+) => {
+  const referenceDefinitionPattern = /^ {0,3}\[[^\]]+\]:(?:\s+|$)/;
+
+  if (!referenceDefinitionPattern.test(line)) {
+    return;
+  }
+
+  zeroContributionRange(textContribution, lineStart, lineStart + line.length);
+};
+
+const hideInlineHtmlTagVisibility = (
+  line: string,
+  lineStart: number,
+  textContribution: number[],
+  protectedRanges: Array<{
+    start: number;
+    end: number;
+  }>,
+) => {
+  const tagPattern = /<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*?)?>/g;
+
+  for (const match of line.matchAll(tagPattern)) {
+    const matchStart = match.index ?? -1;
+    if (matchStart < 0) continue;
+    if (isProtectedOffset(matchStart, protectedRanges)) continue;
+    if (match[0].includes('://')) continue;
+
+    zeroContributionRange(
+      textContribution,
+      lineStart + matchStart,
+      lineStart + matchStart + match[0].length,
+    );
+  }
 };
 
 const findMathDelimiterEnd = (
@@ -119,6 +485,10 @@ const hideMathDelimiterVisibility = (
   line: string,
   lineStart: number,
   textContribution: number[],
+  protectedRanges?: Array<{
+    start: number;
+    end: number;
+  }>,
 ) => {
   const trimmed = line.trim();
 
@@ -156,6 +526,11 @@ const hideMathDelimiterVisibility = (
       textContribution[lineStart + index + offset] = 0;
       textContribution[lineStart + delimiterEnd + offset] = 0;
     }
+
+    protectedRanges?.push({
+      start: index + delimiterLength,
+      end: delimiterEnd,
+    });
 
     index = delimiterEnd + delimiterLength;
   }
@@ -213,6 +588,11 @@ export const buildMarkdownTextMap = (markdown: string): MarkdownTextMap => {
       inFence = true;
     } else if (!hrPattern.test(line.trim()) && !commentPattern.test(line.trim())) {
       const prefixLength = getLinePrefixLength(line);
+      const protectedRanges: Array<{
+        start: number;
+        end: number;
+      }> = [];
+
       for (
         let position = lineStart + Math.min(prefixLength, line.length);
         position < lineEnd;
@@ -221,8 +601,20 @@ export const buildMarkdownTextMap = (markdown: string): MarkdownTextMap => {
         textContribution[position] = 1;
       }
 
-      hideMathDelimiterVisibility(line, lineStart, textContribution);
+      hideReferenceDefinitionVisibility(line, lineStart, textContribution);
+      hideMathDelimiterVisibility(line, lineStart, textContribution, protectedRanges);
+      hideInlineCodeDelimiterVisibility(line, lineStart, textContribution, protectedRanges);
+      hideLinkSyntaxVisibility(line, lineStart, textContribution, protectedRanges);
+      hideEscapedMarkdownSyntax(line, lineStart, textContribution, protectedRanges);
+      hidePairedDelimiterVisibility(line, lineStart, textContribution, '***', protectedRanges);
+      hidePairedDelimiterVisibility(line, lineStart, textContribution, '___', protectedRanges);
+      hidePairedDelimiterVisibility(line, lineStart, textContribution, '~~', protectedRanges);
+      hidePairedDelimiterVisibility(line, lineStart, textContribution, '**', protectedRanges);
+      hidePairedDelimiterVisibility(line, lineStart, textContribution, '__', protectedRanges);
+      hidePairedDelimiterVisibility(line, lineStart, textContribution, '*', protectedRanges);
+      hidePairedDelimiterVisibility(line, lineStart, textContribution, '_', protectedRanges);
       collapseHtmlBreakTags(line, lineStart, textContribution);
+      hideInlineHtmlTagVisibility(line, lineStart, textContribution, protectedRanges);
     }
 
     index = newlineIndex >= 0 ? newlineIndex + 1 : lineEnd + 1;
@@ -296,6 +688,13 @@ const getEditorAtomLength = (node: Node) => {
   return node.getAttribute('data-value')?.length ?? 0;
 };
 
+const getEditorAtomElement = (node: Node) => {
+  const element = node instanceof Element ? node : node.parentElement;
+  if (!element) return null;
+
+  return element.closest('[contenteditable="false"][data-value][data-type^="math"]');
+};
+
 const isEditorTextNode = (node: Node): node is Text => {
   if (node.nodeType !== Node.TEXT_NODE) return false;
   if (!node.textContent) return false;
@@ -335,19 +734,36 @@ const getNodeTextLength = (node: Node): number => {
 };
 
 const measureTextOffset = (root: Node, targetNode: Node, targetOffset: number): number => {
+  const targetAtom = getEditorAtomElement(targetNode);
+  const normalizedTargetNode = targetAtom ?? targetNode;
+  const normalizedTargetOffset = targetAtom ? (targetOffset <= 0 ? 0 : 1) : targetOffset;
   let total = 0;
 
   const walk = (node: Node): boolean => {
-    if (node === targetNode) {
+    const atomLength = getEditorAtomLength(node);
+
+    if (node === normalizedTargetNode) {
+      if (atomLength !== null) {
+        if (normalizedTargetOffset > 0) {
+          total += atomLength;
+        }
+        return true;
+      }
+
       if (isEditorTextNode(node)) {
-        total += Math.min(targetOffset, node.textContent?.length ?? 0);
+        total += Math.min(normalizedTargetOffset, node.textContent?.length ?? 0);
       } else {
-        const limit = Math.min(targetOffset, node.childNodes.length);
+        const limit = Math.min(normalizedTargetOffset, node.childNodes.length);
         for (let index = 0; index < limit; index += 1) {
           total += getNodeTextLength(node.childNodes[index]);
         }
       }
       return true;
+    }
+
+    if (atomLength !== null) {
+      total += atomLength;
+      return false;
     }
 
     if (isEditorTextNode(node)) {

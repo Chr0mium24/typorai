@@ -90,6 +90,25 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+ensure_port_free() {
+  local port="$1"
+  local label="$2"
+  local pids
+
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  if [ -z "$pids" ]; then
+    return 0
+  fi
+
+  echo "$label port $port is already in use."
+  echo "Stop the existing process, or start with a different port:"
+  echo "  bash start.sh --api-port 3002 --port 5174"
+  exit 1
+}
+
+ensure_port_free "$API_PORT" "Backend"
+ensure_port_free "$PORT" "Frontend"
+
 echo "Starting TyporAI backend on http://${API_HOST}:${API_PORT}"
 echo "Admin login: ${ADMIN_USERNAME} / ${ADMIN_PASSWORD}"
 API_HOST="$API_HOST" API_PORT="$API_PORT" pnpm exec tsc -p tsconfig.server.json --watch --preserveWatchOutput &
@@ -99,4 +118,4 @@ API_HOST="$API_HOST" API_PORT="$API_PORT" node --watch .server-dist/server/index
 SERVER_PID=$!
 
 echo "Starting TyporAI frontend on http://${HOST}:${PORT}"
-API_PORT="$API_PORT" exec pnpm dev --host "$HOST" --port "$PORT"
+API_PORT="$API_PORT" exec pnpm dev:client --host "$HOST" --port "$PORT"

@@ -654,7 +654,7 @@ body {
 
 .editor-stack.is-source .source-pane {
   height: 100%;
-  min-height: 72vh;
+  min-height: 0;
 }
 
 .editor-mode-pane.is-hidden {
@@ -669,6 +669,8 @@ body {
 }
 
 .editor-surface {
+  display: flex;
+  height: 100%;
   min-height: 100%;
   width: 100%;
   min-width: 0;
@@ -686,6 +688,9 @@ body {
 
 .editor-card .milkdown,
 .editor-card .milkdown-theme-nord {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
   --crepe-color-background: #faf4eb;
   --crepe-color-on-background: #241c16;
   --crepe-color-surface: #f4ece1;
@@ -854,7 +859,7 @@ body {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  min-height: 72vh;
+  min-height: 0;
   height: 100%;
   border: 0;
   resize: none;
@@ -866,6 +871,10 @@ body {
   font: 0.92rem/1.6 'SFMono-Regular', 'Menlo', 'Consolas', monospace;
   white-space: pre;
   tab-size: 2;
+}
+
+.editor-card.is-source-mode .source-editor {
+  min-height: 100%;
 }
 
 .ai-selection-trigger {

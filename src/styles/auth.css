@@ -1,0 +1,87 @@
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.login-card {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 1rem;
+  padding: 1.4rem;
+  border: 1px solid rgba(63, 45, 29, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 251, 246, 0.94);
+  box-shadow: var(--shadow);
+}
+
+.login-card h1,
+.login-note,
+.login-error {
+  margin: 0;
+}
+
+.login-card h1 {
+  margin-top: 0.2rem;
+  font-size: 1.5rem;
+}
+
+.login-note {
+  margin-top: 0.45rem;
+  color: var(--muted);
+}
+
+.login-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.login-form .field {
+  gap: 0.42rem;
+}
+
+.login-form .field span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.login-form input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.login-form input::placeholder {
+  color: color-mix(in srgb, var(--muted) 82%, white);
+}
+
+.login-form input:focus {
+  border-color: rgba(181, 79, 44, 0.34);
+  box-shadow: 0 0 0 4px rgba(181, 79, 44, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.login-form input:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.login-error {
+  color: var(--accent-strong);
+  font-size: 0.92rem;
+}
+
+.login-submit {
+  width: 100%;
+  justify-content: center;
+}
